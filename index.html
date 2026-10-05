@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0D0F12">
+  <title>OpenStrap</title>
+  <meta name="description" content="A private, self-hosted dashboard for your Fitbit health data.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=32">
+</head>
+<body>
+  <header class="bar">
+    <div class="bar-inner">
+      <a class="brand" href="#/" aria-label="OpenStrap, today">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"/></svg>
+        <span>OpenStrap</span>
+      </a>
+
+      <div class="date-nav" role="group" aria-label="Day">
+        <button class="icon-btn" id="prevDay" type="button" aria-label="Previous day">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+        </button>
+        <button class="date-btn" id="dateBtn" type="button">
+          <span id="dateText">Loading</span>
+        </button>
+        <input type="date" id="datePicker" class="sr-only" tabindex="-1" aria-hidden="true">
+        <button class="icon-btn" id="nextDay" type="button" aria-label="Next day">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+
+      <div class="avatar" id="avatar" aria-hidden="true"></div>
+    </div>
+  </header>
+
+  <div class="demo-banner" id="demoBanner" role="status" hidden>
+    <span>You’re looking at <b>sample data</b> for a fictional person.</span>
+    <span>Run <code>python3 setup.py</code> to connect your Fitbit.</span>
+  </div>
+  <main id="main" class="page" tabindex="-1"></main>
+
+  <footer class="foot" id="foot"></footer>
+  <div class="tooltip" id="tooltip" role="status" hidden></div>
+
+  <script src="app.js?v=32"></script>
+</body>
+</html>

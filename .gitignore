@@ -1,0 +1,24 @@
+# Secrets and sign-in tokens: never commit
+credentials.json
+client_secret_*.json
+google_tokens.json
+fitbit_tokens.json
+fitbit_config.json
+
+# Your health data and profile: these stay on your computer
+api_data/
+dashboard_data.json
+profile.json
+app_sleep_scores.csv
+takeout/
+FitbitAir Data/
+
+# Local environment, logs, editor settings
+.venv/
+logs/
+__pycache__/
+.DS_Store
+.claude/
+
+# Legacy Fitbit Web API tool (superseded by google_health_sync.py)
+fitbit_auto_sync.py

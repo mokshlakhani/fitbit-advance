@@ -1,0 +1,5 @@
+# Optional: sleep scores copied from the Fitbit app, one row per night.
+# Copy this file to app_sleep_scores.csv and add rows. date = the morning you
+# woke up (YYYY-MM-DD). The dashboard shows these as-is and uses them to
+# calibrate the estimate for every other night (15+ nights recommended).
+date,score
