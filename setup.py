@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-command setup for the OpenStrap dashboard.
+"""One-command setup for the DataStrap dashboard.
 
     python3 setup.py
 
@@ -106,7 +106,7 @@ def schedule():
                 Downloads. Move this folder (e.g. to {os.path.join(home, os.path.basename(HERE))})
                 and run setup.py again, or update by hand with: python3 daily_sync.py'''), '  '))
             return
-        label = f'com.openstrap.dashboard.{tag}'
+        label = f'com.datastrap.dashboard.{tag}'
         plist = os.path.join(home, 'Library', 'LaunchAgents', f'{label}.plist')
         args_xml = ''.join(f'<string>{escape(a)}</string>' for a in job)
         with open(plist, 'w') as fh:
@@ -128,7 +128,7 @@ def schedule():
         subprocess.run(['launchctl', 'bootstrap', domain, plist], check=True)
         print(f'  Done. Log: {os.path.relpath(log, HERE)}')
     elif system == 'Linux' and shutil.which('crontab'):
-        marker = f'# openstrap-dashboard {tag}'
+        marker = f'# datastrap-dashboard {tag}'
         line = f'0 10 * * * cd "{HERE}" && "{job[0]}" "{job[1]}" >> "{log}" 2>&1 {marker}'
         current = subprocess.run(['crontab', '-l'], capture_output=True, text=True).stdout
         lines = [l for l in current.splitlines() if marker not in l] + [line]
@@ -137,7 +137,7 @@ def schedule():
     else:
         print('  Automatic scheduling isn\'t set up on this system. To update, run: python3 daily_sync.py')
         if WINDOWS:
-            print(f'  Or schedule it with: schtasks /create /tn OpenStrap /sc daily /st 10:00 /tr "\\"{job[0]}\\" \\"{job[1]}\\""')
+            print(f'  Or schedule it with: schtasks /create /tn DataStrap /sc daily /st 10:00 /tr "\\"{job[0]}\\" \\"{job[1]}\\""')
 
 
 def open_dashboard():
@@ -147,7 +147,7 @@ def open_dashboard():
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Set up the OpenStrap dashboard.')
+    ap = argparse.ArgumentParser(description='Set up the DataStrap dashboard.')
     ap.add_argument('--days', type=int, default=90, help='days of history to download (default 90)')
     ap.add_argument('--no-schedule', action='store_true', help="don't schedule the daily update")
     ap.add_argument('--no-open', action='store_true', help="don't start the dashboard at the end")

@@ -1,7 +1,7 @@
 # CLAUDE.md — Project knowledge base
 
 ## 1. Overview
-**OpenStrap** is a self-hosted dashboard for Fitbit data. It downloads a user's data from the Google Health API (optionally plus a Google Takeout export), applies analytics ported from the open-source **OpenStrap** library (`OpenStrap/analytics-main/lib`), and serves a dark-mode dashboard on the user's own computer. No personal data is committed: everything personal lives in git-ignored files.
+**DataStrap** is a self-hosted dashboard for Fitbit data. It downloads a user's data from the Google Health API (optionally plus a Google Takeout export), applies analytics ported from the open-source **OpenStrap** library (`OpenStrap/analytics-main/lib`), and serves a dark-mode dashboard on the user's own computer. No personal data is committed: everything personal lives in git-ignored files.
 
 Metrics: recovery (0–100, with driver breakdown), day strain (0–21, Banister TRIMP), sleep (stages, efficiency, estimated sleep score), heart (resting HR, HRV, intraday HR, stress index), body (skin temperature, SpO₂, breathing rate, VO₂ max, fitness age), workouts.
 

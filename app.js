@@ -1,4 +1,4 @@
-// OpenStrap dashboard.
+// DataStrap dashboard.
 // Home shows the selected day at a glance; every metric opens a detail page
 // with Day / Week / Month / 3-month views over calendar periods.
 
@@ -1019,7 +1019,7 @@ function render({ pageEnter = false } = {}) {
   charts = {};
   const main = $('#main');
   main.innerHTML = state.route.page === 'home' ? renderHome() : renderDetail();
-  document.title = state.route.page === 'home' ? 'OpenStrap' : `${M[state.route.key].label} · OpenStrap`;
+  document.title = state.route.page === 'home' ? 'DataStrap' : `${M[state.route.key].label} · DataStrap`;
   if (pageEnter && !reducedMotion) {
     main.classList.remove('enter', 'enter-detail');
     void main.offsetWidth;

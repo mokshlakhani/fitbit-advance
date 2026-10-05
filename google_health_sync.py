@@ -97,7 +97,7 @@ def _save_tokens(tokens, client):
     return tokens
 
 
-PAGE = """<!doctype html><meta charset=utf-8><title>OpenStrap</title>
+PAGE = """<!doctype html><meta charset=utf-8><title>DataStrap</title>
 <body style="font-family:system-ui;background:#0D0F12;color:#ECEEF1;display:grid;place-items:center;height:100vh;margin:0">
 <div style="text-align:center"><h1 style="font-weight:500">{title}</h1><p style="color:#B9BFC8">{body}</p></div>"""
 

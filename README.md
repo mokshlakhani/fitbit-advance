@@ -1,4 +1,4 @@
-# OpenStrap
+# DataStrap
 
 A private health dashboard for your Fitbit. It runs on your own computer, pulls your data from Google Health every morning, and shows recovery, strain, sleep, heart and body metrics, each with day, week, month and 3-month views.
 
