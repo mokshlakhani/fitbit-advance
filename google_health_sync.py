@@ -209,7 +209,7 @@ def _latest(token, data_type, field, value_key):
 
 
 def sync_profile(token):
-    """Name, age, time zone, units, height and weight -> profile.json (best effort)."""
+    """Age, time zone, units, height and weight -> profile.json (best effort)."""
     found = {}
     for label, fn in [
         ('profile', lambda: _get('profile', token)),
@@ -220,7 +220,9 @@ def sync_profile(token):
         except urllib.error.HTTPError:
             continue
         if label == 'profile':
-            found.update(name=body.get('name'), age=body.get('age'))
+            # The profile's `name` field is the resource ID (users/…/profile),
+            # not a display name, so only the age is used.
+            found.update(age=body.get('age'))
         else:
             found.update(timezone=body.get('timeZone'), temperature_unit=body.get('temperatureUnit'))
     for key, args, scale in [('weight_kg', ('weight', 'weight', 'weightGrams'), 1000.0),

@@ -1,8 +1,8 @@
 """The user's profile and local time zone, shared by sync, pipeline and setup.
 
 profile.json is written by setup.py / google_health_sync.py from the user's
-Google Health profile and settings (name, age, height, weight, time zone,
-temperature unit). Sex isn't available from the API, so setup asks for it once.
+Google Health profile and settings (age, height, weight, time zone,
+temperature unit). The API has no display name; add "name" by hand if wanted. Sex isn't available from the API, so setup asks for it once.
 Nothing personal is hard-coded anywhere else.
 """
 import json

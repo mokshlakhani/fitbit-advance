@@ -69,7 +69,7 @@ def connect_and_profile():
     except g.NotConnected as e:
         sys.exit(f'  {e}\n  Run python3 setup.py again to retry.')
     profile = g.sync_profile(tokens['access_token'])
-    print(f"  Connected{' as ' + profile['name'] if profile.get('name') else ''}.")
+    print('  Connected.')
     if not profile.get('sex') and sys.stdin.isatty():
         # The training-load formula has separate coefficients for men and women;
         # Google Health doesn't share this, so ask once.

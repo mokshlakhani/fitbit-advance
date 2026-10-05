@@ -86,36 +86,19 @@ function tierOf(score) {
   return { cls: 'poor', word: 'Take it easy', strain: 'under 10', color: 'var(--poor)' };
 }
 
-// ---------- Icons (24px stroke) ----------
-const I = {
-  recovery: 'M12 3a9 9 0 1 0 9 9M12 7v5l3 2',
-  steps: 'M3 16h18v-1.5c0-1.6-1.3-2.9-2.9-3.2L14 10.5 12 6H9l-.5 4L5 11c-1.2.4-2 1.5-2 2.8zM3 19.5h18',
-  energy: 'M12 3c1 3 4 5 4 9a4 4 0 0 1-8 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 0-8z',
-  strain: 'M13 3 5 13h6l-1 8 8-10h-6z',
-  zones: 'M5 19v-6M10 19V9M15 19v-4M20 19V5',
-  sleep: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
-  sleepScore: 'M12 3.5l2.5 5.3 5.8.7-4.3 4 1.1 5.7L12 16.4l-5.1 2.8 1.1-5.7-4.3-4 5.8-.7z',
-  efficiency: 'M4 17a8 8 0 1 1 16 0M12 17l4-5',
-  rhr: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
-  hrv: 'M3 12h3l2-5 3 10 3-8 2 3h5',
-  hr: 'M3 12h4l2.5-6 4 12 2.5-6H21',
-  stress: 'M4 16a8 8 0 0 1 16 0M12 16l-3.5-4.5M4 20h16',
-  temp: 'M10 13.5V5a2 2 0 1 1 4 0v8.5a4 4 0 1 1-4 0zM12 9v7',
-  spo2: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z',
-  resp: 'M3 9h11a3 3 0 1 0-3-3M3 15h14a3 3 0 1 1-3 3M3 12h7',
-  vo2: 'M12 4v7M12 11c-2 0-3-3-5-3-2 0-3 4-3 7 0 2 1 4 3 4 3 0 5-3 5-8zM12 11c2 0 3-3 5-3 2 0 3 4 3 7 0 2-1 4-3 4-3 0-5-3-5-8z',
-  lift: 'M6.5 6.5v11M3.5 9v6M17.5 6.5v11M20.5 9v6M6.5 12h11',
-  run: 'M14 4.5a1.5 1.5 0 1 0 0 .01M6 21l3.5-5.5L12 17l1-5 3 3h3M9.5 10.5 12 8.5l1 3.5',
-  ball: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM12 7.5l3.5 2.5-1.3 4h-4.4l-1.3-4z',
-  chev: 'M9 6l6 6-6 6',
-  back: 'M15 6l-6 6 6 6',
+// ---------- Icons (Lucide, see icons.js) ----------
+const ICON = {
+  recovery: 'battery-charging', steps: 'footprints', energy: 'flame', strain: 'zap', zones: 'activity',
+  sleep: 'moon', sleepScore: 'star', efficiency: 'gauge', rhr: 'heart', hrv: 'audio-waveform', hr: 'heart-pulse',
+  stress: 'brain', temp: 'thermometer', spo2: 'droplet', resp: 'wind', vo2: 'mountain',
+  chev: 'chevron-right', back: 'chevron-left',
 };
-const icon = (name, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${I[name]}"/></svg>`;
+const icon = (name, cls = '') => lucide(ICON[name] || name, cls);
 
 // ---------- Metrics ----------
 const GROUPS = {
   recovery: { color: 'var(--good)' },
-  activity: { label: 'Activity', color: 'var(--activity)' },
+  activity: { label: 'Activity', color: 'var(--strain)' },
   sleep: { label: 'Sleep', color: 'var(--sleep)' },
   heart: { label: 'Heart', color: 'var(--heart)' },
   body: { label: 'Body', color: 'var(--body)' },
@@ -133,7 +116,7 @@ const M = {
     pick: d => (d.cardiovascular.hrv_rmssd != null ? d.recovery.score : null) },
   steps: { label: 'Steps', group: 'activity', unit: '', dp: 0, kind: 'bar', agg: 'sum', goal: 10000, intraday: 'hourly_steps', defaultRange: 'day', pick: d => d.strain.steps },
   energy: { label: 'Energy burned', cardLabel: 'Energy', group: 'activity', unit: 'cal', dp: 0, kind: 'bar', agg: 'sum', intraday: 'hourly_calories', defaultRange: 'day', pick: d => d.strain.calories },
-  strain: { label: 'Day strain', group: 'activity', unit: '/21', dp: 1, kind: 'bar', agg: 'avg', domain: [0, 21], intraday: 'hr', defaultRange: 'week', pick: d => d.strain.score },
+  strain: { label: 'Day strain', cardLabel: 'Strain', group: 'activity', unit: '/21', dp: 1, kind: 'bar', agg: 'avg', domain: [0, 21], intraday: 'hr', defaultRange: 'week', pick: d => d.strain.score },
   zones: { label: 'Zone minutes', group: 'activity', unit: 'min', dp: 0, kind: 'bar', agg: 'sum', intraday: 'zones', defaultRange: 'week', pick: zoneMin },
   sleep: { label: 'Time asleep', group: 'sleep', unit: 'dur', dp: 0, kind: 'bar', agg: 'avg', goal: 480, better: 'higher', intraday: 'hypnogram', defaultRange: 'day', pick: d => d.sleep.duration_minutes },
   sleepScore: { label: 'Sleep score', group: 'sleep', unit: '', dp: 0, kind: 'line', agg: 'avg', better: 'higher', intraday: 'scoreDrivers', defaultRange: 'day',
@@ -161,12 +144,6 @@ const M = {
     note: 'Your last measured cardio fitness score, carried forward until Fitbit measures it again.' },
 };
 
-const SECTIONS = [
-  { group: 'activity', keys: ['steps', 'energy', 'strain', 'zones'] },
-  { group: 'sleep', keys: ['sleep', 'sleepScore', 'efficiency'] },
-  { group: 'heart', keys: ['rhr', 'hrv', 'hr', 'stress'] },
-  { group: 'body', keys: ['temp', 'spo2', 'resp', 'vo2'] },
-];
 
 const DRIVER_KEY = { 'HRV (RMSSD)': 'hrv', 'Resting Heart Rate': 'rhr', 'Respiratory Rate': 'resp', 'Skin Temperature': 'temp' };
 
@@ -572,6 +549,262 @@ function weekWindow(idx) {
   return out;
 }
 
+// Seven days around the selected one, for the day strip.
+function stripWindow(idx) {
+  const n = days().length;
+  const start = Math.max(0, Math.min(idx - 3, n - 7));
+  const out = [];
+  for (let i = start; i < Math.min(n, start + 7); i++) out.push(i);
+  return out;
+}
+
+function weekStrip() {
+  const C = 2 * Math.PI * 10;
+  return `<nav class="week" aria-label="Days">${stripWindow(state.idx).map(i => {
+    const d = days()[i];
+    const rec = M.recovery.pick(d);
+    const t = tierOf(rec);
+    const arc = isNum(rec)
+      ? `<circle class="arc" cx="13" cy="13" r="10" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - rec / 100)}" style="stroke:${t.color}"/>`
+      : '';
+    return `<a class="wday" href="${hrefHome(d.date)}" data-replace ${i === state.idx ? 'aria-current="date"' : ''}
+        aria-label="${esc(longDate(d.date))}${isNum(rec) ? `, recovery ${rec}%` : ''}">
+      <span class="label">${fmtDate(d.date, { weekday: 'short' })}</span>
+      <span class="wday-num">${parseDate(d.date).getDate()}</span>
+      <svg class="wday-ring" viewBox="0 0 26 26" aria-hidden="true"><circle class="track" cx="13" cy="13" r="10"/>${arc}</svg>
+    </a>`;
+  }).join('')}</nav>`;
+}
+
+function dial(key, { name, color, frac, valueHtml: inner, sub, tag, label }) {
+  const R = 88;
+  const C = 2 * Math.PI * R;
+  const ticks = Array.from({ length: 60 }, (_, k) => {
+    const a = (k / 60) * 2 * Math.PI;
+    const long = k % 5 === 0;
+    const r1 = 101, r2 = long ? 107 : 104;
+    return `<line x1="${110 + r1 * Math.sin(a)}" y1="${110 - r1 * Math.cos(a)}" x2="${110 + r2 * Math.sin(a)}" y2="${110 - r2 * Math.cos(a)}"/>`;
+  }).join('');
+  const arc = isNum(frac)
+    ? `<circle class="dial-arc" cx="110" cy="110" r="${R}" stroke-width="13" style="stroke:${color}" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - Math.min(1, Math.max(0, frac)))}"/>`
+    : '';
+  return `<a class="dial reveal" style="--c:${color}" href="${hrefMetric(key, M[key].defaultRange, day().date)}" aria-label="${esc(label)}. Open details">
+    ${tag ? `<span class="tag">${tag}</span>` : ''}
+    <div class="dial-ring">
+      <svg viewBox="0 0 220 220" aria-hidden="true">
+        <g class="dial-ticks">${ticks}</g>
+        <circle class="dial-track" cx="110" cy="110" r="${R}" stroke-width="13"/>
+        ${arc}
+      </svg>
+      <div class="dial-center">
+        <div class="dial-value ${inner ? '' : 'none'}">${inner || '—'}</div>
+        <div class="dial-sub">${esc(sub)}</div>
+      </div>
+    </div>
+    <span class="label dial-name">${name}</span>
+  </a>`;
+}
+
+function strainWord(s) {
+  return s >= 14 ? 'Hard' : s >= 10 ? 'Moderate' : s >= 5 ? 'Light' : 'Rest';
+}
+
+function dials(d) {
+  const rec = M.recovery.pick(d);
+  const t = tierOf(rec);
+  const sl = d.sleep;
+  const score = sl.score;
+  const st = d.strain.score;
+  const isLatest = state.idx === days().length - 1;
+  const num = (v, dp, k) => `<span data-num="${v}" data-dp="${dp}" data-key="${k}">${fmt(v, dp)}</span>`;
+  return `<section class="dials" aria-label="Today at a glance">
+    ${dial('sleepScore', {
+      name: 'Sleep', color: 'var(--sleep)', frac: isNum(score) ? score / 100 : null,
+      valueHtml: isNum(score) ? `${num(score, 0, 'dial-sleep')}<small>%</small>` : '',
+      sub: isNum(sl.duration_minutes) ? fmtDur(sl.duration_minutes) : 'No sleep',
+      tag: isNum(score) && sl.score_source === 'estimate' ? 'Est.' : '',
+      label: `Sleep score ${isNum(score) ? score + '%' : 'not available'}`,
+    })}
+    ${dial('recovery', {
+      name: 'Recovery', color: t ? t.color : 'var(--text-3)', frac: isNum(rec) ? rec / 100 : null,
+      valueHtml: isNum(rec) ? `${num(rec, 0, 'dial-rec')}<small>%</small>` : '',
+      sub: t ? t.word : 'Waiting',
+      label: `Recovery ${isNum(rec) ? rec + '%' : 'not available yet'}`,
+    })}
+    ${dial('strain', {
+      name: 'Strain', color: 'var(--strain)', frac: isNum(st) ? st / 21 : null,
+      valueHtml: isNum(st) ? num(st, 1, 'dial-strain') : '',
+      sub: isNum(st) ? `${strainWord(st)}${isLatest ? ' so far' : ''}` : 'No heart rate',
+      label: `Strain ${isNum(st) ? fmt(st, 1) + ' of 21' : 'not available'}`,
+    })}
+  </section>`;
+}
+
+function insightCard(d) {
+  const story = buildStory(d, state.idx);
+  const rec = M.recovery.pick(d);
+  const t = tierOf(rec);
+  const rel = relativeDay(d.date);
+  const chips = [
+    t ? `<span class="chip">${lucide('zap')}Aim for <b>${t.strain}</b> strain</span>` : '',
+    isNum(d.sleep.duration_minutes) ? `<a class="chip" href="${hrefMetric('sleep', 'day', d.date)}">${lucide('moon')}Slept <b>${fmtDur(d.sleep.duration_minutes)}</b></a>` : '',
+    isNum(d.strain.steps) ? `<a class="chip" href="${hrefMetric('steps', 'day', d.date)}">${lucide('footprints')}<b>${fmt(d.strain.steps)}</b> steps</a>` : '',
+  ].join('');
+  return `<section class="insight reveal" aria-label="Insight">
+    <span class="insight-icon">${lucide('sparkles')}</span>
+    <div>
+      <span class="label">${esc(rel ? `${rel} · ${fullDate(d.date)}` : fullDate(d.date))}</span>
+      <h1>${esc(story.head)}</h1>
+      <p>${esc(story.body)}</p>
+      <div class="chips">${chips}</div>
+    </div>
+  </section>`;
+}
+
+// 24-hour timeline: heart rate, with sleep and workouts marked.
+function dayBlocks(d) {
+  const blocks = [];
+  const dayStart = parseDate(d.date).getTime();
+  const toMin = t => Math.max(0, Math.min(1440, (t - dayStart) / 60000));
+  const st = (d.sleep.hypnogram || []).filter(s => s.time && s.seconds);
+  if (st.length) {
+    const a = parseLocal(st[0].time).getTime();
+    const last = st[st.length - 1];
+    const b = parseLocal(last.time).getTime() + last.seconds * 1000;
+    if (b > dayStart) blocks.push({ kind: 'sleep', from: toMin(a), to: toMin(b), label: 'Sleep', tip: `Sleep ${hhmm(new Date(a))}–${hhmm(new Date(b))}` });
+  }
+  const next = days()[state.idx + 1];
+  const nst = next ? (next.sleep.hypnogram || []).filter(s => s.time && s.seconds) : [];
+  if (nst.length && nst[0].time.slice(0, 10) === d.date) {
+    const a = parseLocal(nst[0].time).getTime();
+    blocks.push({ kind: 'sleep', from: toMin(a), to: 1440, label: 'Sleep', tip: `Sleep from ${hhmm(new Date(a))}` });
+  }
+  for (const w of d.strain.workouts || []) {
+    const [h, m] = (w.time || '0:0').split(':').map(Number);
+    const from = h * 60 + m;
+    blocks.push({ kind: 'workout', from, to: Math.min(1440, from + (w.duration_minutes || 0)), label: w.name,
+      tip: `${w.name} · ${w.time} · ${w.duration_minutes} min${w.avg_hr ? ` · ${w.avg_hr} bpm` : ''}` });
+  }
+  return blocks;
+}
+
+function myDayChart(w, d) {
+  const H = 240, top = 26, bottom = 28, padL = 4, padR = 40;
+  const plotB = H - bottom;
+  const hr = d.strain.intraday_hr || [];
+  const x = scale(0, 1440, padL, w - padR);
+  const mins = hr.map(p => { const [h, m] = p.time.split(':').map(Number); return h * 60 + m; });
+  const bpm = hr.map(p => p.bpm);
+  const t = niceTicks(Math.min(...bpm, 50) - 5, Math.max(...bpm, 100) + 5, 3);
+  const y = scale(t.lo, t.hi, plotB, top);
+  const blocks = dayBlocks(d).map((b, i) => {
+    const c = b.kind === 'sleep' ? 'var(--sleep)' : 'var(--strain)';
+    const x1 = x(b.from), x2 = Math.max(x(b.to), x1 + 3);
+    const lw = x2 - x1;
+    return `<g class="band-in" style="animation-delay:${200 + i * 80}ms">
+      <rect x="${x1}" y="${top - 18}" width="${lw}" height="${plotB - top + 18}" rx="6" style="fill:${c};fill-opacity:.12"/>
+      <rect x="${x1}" y="${top - 18}" width="${lw}" height="3" rx="1.5" style="fill:${c}"/>
+      ${lw > 44 ? `<text x="${x1 + 6}" y="${top - 4}" style="fill:${c};font-weight:600">${esc(b.label.length * 6.5 > lw - 8 ? b.label.slice(0, Math.max(1, Math.floor((lw - 14) / 6.5))) + '…' : b.label)}</text>` : ''}
+      <rect class="hit" x="${x1}" y="${top - 18}" width="${lw}" height="16" data-tip="<b>${esc(b.tip)}</b>"/>
+    </g>`;
+  }).join('');
+  const grid = t.ticks.map(v => `<line class="grid-line" x1="${padL}" x2="${w - padR}" y1="${y(v)}" y2="${y(v)}"/><text x="${w - padR + 8}" y="${y(v) + 4}">${v}</text>`).join('');
+  const pts = hr.map((p, i) => `${x(mins[i]).toFixed(1)},${y(p.bpm).toFixed(1)}`).join('L');
+  const area = hr.length > 1 ? `<path class="area" d="M${x(mins[0])},${plotB}L${pts}L${x(mins[mins.length - 1])},${plotB}Z" fill="url(#hrFade)"/>` : '';
+  const line = hr.length > 1 ? `<path class="draw" d="M${pts}" pathLength="1" style="fill:none;stroke:var(--heart);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>` : '';
+  const rhr = d.cardiovascular.rhr;
+  const rhrLine = isNum(rhr) ? `<line class="goal" x1="${padL}" x2="${w - padR}" y1="${y(rhr)}" y2="${y(rhr)}"/>` : '';
+  const xt = [[0, '12 AM'], [360, '6 AM'], [720, '12 PM'], [1080, '6 PM'], [1440, '12 AM']]
+    .map(([m, lab], i) => `<text x="${x(m)}" y="${H - 8}" text-anchor="${i === 0 ? 'start' : i === 4 ? 'end' : 'middle'}">${lab}</text>`).join('');
+  let now = '';
+  if (relativeDay(d.date) === 'Today') {
+    const n = new Date();
+    const nx = x(n.getHours() * 60 + n.getMinutes());
+    now = `<line x1="${nx}" x2="${nx}" y1="${top - 18}" y2="${plotB}" style="stroke:var(--text-2);stroke-width:1;stroke-dasharray:2 3"/><text x="${nx}" y="${top - 22}" text-anchor="middle" style="fill:var(--text-2);font-weight:600">NOW</text>`;
+  }
+  const xs = mins.map(m => x(m));
+  const tips = hr.map(p => `<b>${p.bpm} bpm</b><span>${p.time}</span>`);
+  const hovers = xs.map((xx, i) => `<g class="hover-mark"><line x1="${xx}" x2="${xx}" y1="${top}" y2="${plotB}" style="stroke:var(--line-strong)"/><circle cx="${xx}" cy="${y(bpm[i])}" r="4.5" style="fill:var(--heart);stroke:var(--card);stroke-width:2"/></g>`);
+  return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="Heart rate through the day">
+    <defs><linearGradient id="hrFade" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF6F8E" stop-opacity=".32"/><stop offset="1" stop-color="#FF6F8E" stop-opacity="0"/></linearGradient></defs>
+    ${grid}${blocks}${area}${rhrLine}${line}${now}${xt}
+    ${hr.length ? hitStrips(xs, top, plotB - top, tips, null, hovers) : ''}
+  </svg>`;
+}
+
+function myDayPanel(d) {
+  const hr = (d.strain.intraday_hr || []).map(p => p.bpm);
+  if (!hr.length) {
+    return `<section class="panel reveal"><div class="panel-title"><span class="label">My Day</span></div><p class="empty">No heart rate recorded for this day.</p></section>`;
+  }
+  const avg = Math.round(mean(hr));
+  const max = Math.max(...hr);
+  return `<section class="panel reveal" aria-label="My day">
+    <div class="panel-head">
+      <div class="panel-title"><span class="label">My Day</span><b>${avg}<small>bpm avg</small></b></div>
+      <div class="legend">
+        <span><i style="background:var(--heart)"></i>Heart rate<b>${Math.min(...hr)}–${max}</b></span>
+        <span><i style="background:var(--sleep)"></i>Sleep</span>
+        <span><i style="background:var(--strain)"></i>Workouts<b>${(d.strain.workouts || []).length}</b></span>
+      </div>
+    </div>
+    ${slot('myday', w => myDayChart(w, d))}
+  </section>`;
+}
+
+// Recovery bars with the day's strain drawn over them: are you balancing load and rest?
+function comboChart(w, idxs) {
+  const H = 230, top = 14, bottom = 30, padL = 34, padR = 34;
+  const plotB = H - bottom;
+  const n = idxs.length;
+  const step = (w - padL - padR) / n;
+  const bw = Math.min(26, step * 0.56);
+  const xs = idxs.map((_, k) => padL + step * (k + 0.5));
+  const yR = scale(0, 100, plotB, top);
+  const yS = scale(0, 21, plotB, top);
+  const sel = idxs.indexOf(state.idx);
+  const grid = [0, 50, 100].map(v => `<line class="grid-line" x1="${padL}" x2="${w - padR}" y1="${yR(v)}" y2="${yR(v)}"/><text x="${w - padR + 8}" y="${yR(v) + 4}">${v}%</text>`).join('')
+    + [0, 7, 14, 21].map(v => `<text x="${padL - 8}" y="${yS(v) + 4}" text-anchor="end" style="fill:var(--strain)">${v}</text>`).join('');
+  const bars = idxs.map((i, k) => {
+    const v = M.recovery.pick(days()[i]);
+    if (!isNum(v)) return '';
+    const h = Math.max(3, plotB - yR(v));
+    return `<rect class="bar-mark" x="${xs[k] - bw / 2}" y="${plotB - h}" width="${bw}" height="${h}" rx="${Math.min(6, bw / 2)}" style="fill:${tierOf(v).color};opacity:${k === sel ? 1 : 0.62};animation-delay:${k * 35}ms"/>`;
+  }).join('');
+  const sv = idxs.map(i => days()[i].strain.score);
+  const pts = sv.map((v, k) => (isNum(v) ? `${xs[k].toFixed(1)},${yS(v).toFixed(1)}` : null)).filter(Boolean).join('L');
+  const line = `<path class="draw" d="M${pts}" pathLength="1" style="fill:none;stroke:var(--strain);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round"/>`;
+  const dots = sv.map((v, k) => (isNum(v) ? `<circle class="dot" cx="${xs[k]}" cy="${yS(v)}" r="${k === sel ? 5.5 : 3.5}" style="fill:${k === sel ? 'var(--text)' : 'var(--strain)'};stroke:var(--card);stroke-width:2;animation-delay:${300 + k * 35}ms"/>` : '')).join('');
+  const labels = idxs.map(i => String(parseDate(days()[i].date).getDate()));
+  const tips = idxs.map((i, k) => {
+    const d = days()[i];
+    const r = M.recovery.pick(d);
+    return `<b>${isNum(r) ? `Recovery ${r}%` : 'No recovery'}</b><span>Strain ${isNum(sv[k]) ? fmt(sv[k], 1) : '--'} · ${longDate(d.date)}</span>`;
+  });
+  const hrefs = idxs.map(i => hrefHome(days()[i].date));
+  return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="Recovery and strain over the last ${n} days">
+    ${grid}${bars}${line}${dots}${xLabels(xs, labels, H, sel)}${hitStrips(xs, top, plotB - top, tips, hrefs)}
+  </svg>`;
+}
+
+function trendsPanel() {
+  const idxs = [];
+  for (let i = Math.max(0, state.idx - 13); i <= state.idx; i++) idxs.push(i);
+  const recs = idxs.map(i => M.recovery.pick(days()[i]));
+  const strains = idxs.map(i => days()[i].strain.score);
+  return `<section class="panel reveal" aria-label="Strain and recovery">
+    <div class="panel-head">
+      <div class="panel-title"><span class="label">Strain &amp; Recovery · ${idxs.length} days</span><b>${isNum(mean(recs)) ? Math.round(mean(recs)) : '--'}<small>% avg recovery</small></b></div>
+      <div class="legend">
+        <span><i style="background:var(--good)"></i>Recovery</span>
+        <span><i style="background:var(--strain);border-radius:50%"></i>Strain<b>${fmt(mean(strains), 1)} avg</b></span>
+      </div>
+    </div>
+    ${slot('combo', w => comboChart(w, idxs))}
+    <p class="note">Select a day to open it.</p>
+  </section>`;
+}
+
 function metricCard(key, { wide = false } = {}) {
   const m = M[key];
   const d = day();
@@ -590,7 +823,7 @@ function metricCard(key, { wide = false } = {}) {
     extra = `<div class="stage-strip" aria-hidden="true">${STAGES.map(s => `<span style="flex-grow:${mins[s.key] || 0};background:${s.color}"></span>`).join('')}</div>
       <div class="legend">${STAGES.map(s => `<span><i style="background:${s.color}"></i>${s.label}<b>${fmtDur(mins[s.key])}</b></span>`).join('')}</div>`;
   }
-  return `<a class="card ${wide ? 'wide' : ''}" href="${hrefMetric(key, m.defaultRange, iso)}" style="--accent:${accent(key)}" aria-label="${esc(m.label)}: ${esc(valueText(key, v))}${estimated ? ', estimated' : ''}. Open details">
+  return `<a class="card reveal ${wide ? 'wide' : ''}" href="${hrefMetric(key, m.defaultRange, iso)}" style="--accent:${accent(key)}" aria-label="${esc(m.label)}: ${esc(valueText(key, v))}${estimated ? ', estimated' : ''}. Open details">
     <div class="card-top"><span class="glyph">${icon(key)}</span><span class="card-label">${esc(m.cardLabel || m.label)}</span>${estimated ? '<span class="tag" title="Estimated: Google’s API doesn’t provide Fitbit’s sleep score">Est.</span>' : ''}${icon('chev', 'chev')}</div>
     ${value}
     ${deltaHtml(key, state.idx)}
@@ -598,84 +831,51 @@ function metricCard(key, { wide = false } = {}) {
   </a>`;
 }
 
+function workoutIcon(name) {
+  if (/(cycl|bike|spin)/i.test(name)) return 'bike';
+  if (/(run|walk|hike|treadmill)/i.test(name)) return 'footprints';
+  if (/(football|soccer|sport|tennis|basket|cricket|badminton|volley)/i.test(name)) return 'volleyball';
+  return 'dumbbell';
+}
+
 function workoutsCard() {
   const ws = day().strain.workouts || [];
-  const glyphFor = n => (/(run|walk|hike|treadmill)/i.test(n) ? 'run' : /(football|soccer|sport|tennis|basket|cricket|badminton)/i.test(n) ? 'ball' : 'lift');
   const body = ws.length ? `<div class="workouts">${ws.map(w => `<div class="workout">
-      <span class="glyph" style="--accent:var(--activity)">${icon(glyphFor(w.name))}</span>
+      <span class="glyph" style="--accent:var(--strain)">${lucide(workoutIcon(w.name))}</span>
       <div><div class="workout-name">${esc(w.name)}</div>
-      <div class="workout-meta">${esc([w.time, `${w.duration_minutes} min`, w.calories ? `${w.calories} cal` : null, w.avg_hr ? `${w.avg_hr} bpm avg` : null].filter(Boolean).join(' · '))}</div></div>
+      <div class="workout-meta">${esc([w.time, w.calories ? `${w.calories} cal` : null, w.avg_hr ? `${w.avg_hr} bpm avg` : null].filter(Boolean).join(' · '))}</div></div>
+      <div class="workout-strain"><b>${w.duration_minutes}</b><span class="label">min</span></div>
     </div>`).join('')}</div>` : '<p class="empty">No workouts logged.</p>';
-  return `<div class="card full" style="--accent:var(--activity)">
-    <div class="card-top"><span class="glyph">${icon('lift')}</span><span class="card-label">Workouts</span></div>
+  return `<div class="card full reveal" style="--accent:var(--strain)">
+    <div class="card-top"><span class="glyph">${lucide('dumbbell')}</span><span class="card-label">Workouts</span></div>
     ${body}
   </div>`;
 }
 
-function pulseBackdrop(d) {
-  const hr = (d.strain.intraday_hr || []).map(p => p.bpm);
-  if (hr.length < 10) return '';
-  const lo = Math.min(...hr), hi = Math.max(...hr);
-  const y = scale(lo - 5, hi + 5, 196, 20);
-  const pts = hr.map((v, i) => `${(i / (hr.length - 1) * 1000).toFixed(1)},${y(v).toFixed(1)}`);
-  return `<svg class="hero-pulse" viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true">
-    <defs><linearGradient id="pulseFade" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="var(--mood)" stop-opacity=".16"/><stop offset="1" stop-color="var(--mood)" stop-opacity="0"/></linearGradient></defs>
-    <path class="fill" d="M0,200L${pts.join('L')}L1000,200Z"/>
-    <path d="M${pts.join('L')}" vector-effect="non-scaling-stroke"/>
-  </svg>`;
-}
+const HOME_SECTIONS = [
+  { title: 'Key metrics', keys: ['hrv', 'rhr', 'resp', 'spo2', 'temp', 'vo2', 'stress', 'hr'] },
+  { title: 'Sleep', keys: ['sleep', 'sleepScore', 'efficiency'] },
+  { title: 'Activity', keys: ['steps', 'energy', 'strain', 'zones'], workouts: true },
+];
 
 function renderHome() {
   const d = day();
-  const iso = d.date;
   const rec = M.recovery.pick(d);
   const t = tierOf(rec);
   document.documentElement.style.setProperty('--mood', t ? t.color : 'var(--text-3)');
-  const story = buildStory(d, state.idx);
-  const C = 2 * Math.PI * 86;
-  const rel = relativeDay(iso);
 
-  const pill = (key, colorVar) => {
-    const v = M[key].pick(d);
-    return `<a class="stat-pill" href="${hrefMetric(key, M[key].defaultRange, iso)}"><i style="background:${colorVar}"></i>${esc(M[key].label === 'Day strain' ? 'Strain' : M[key].label === 'Time asleep' ? 'Sleep' : M[key].label)}<b>${esc(valueText(key, v))}</b></a>`;
-  };
-
-  const sections = SECTIONS.map(sec => {
-    const g = GROUPS[sec.group];
-    const cards = sec.keys.map(k => metricCard(k, { wide: k === 'sleep' })).join('') + (sec.group === 'activity' ? workoutsCard() : '');
-    return `<section class="section" aria-labelledby="h-${sec.group}">
-      <div class="section-head"><h2 id="h-${sec.group}">${g.label}</h2></div>
-      <div class="grid">${cards}</div>
-    </section>`;
-  }).join('');
+  const sections = HOME_SECTIONS.map(sec => `<section class="section">
+      <div class="section-head"><h2>${sec.title}</h2></div>
+      <div class="grid">${sec.keys.map(k => metricCard(k, { wide: k === 'sleep' })).join('')}${sec.workouts ? workoutsCard() : ''}</div>
+    </section>`).join('');
 
   return `
-    <section class="hero" aria-label="Recovery">
-      ${pulseBackdrop(d)}
-      <a class="ring-link" href="${hrefMetric('recovery', 'day', iso)}" aria-label="Recovery ${isNum(rec) ? rec + '%' : 'no data'}. Open details">
-        <svg class="ring" viewBox="0 0 196 196" aria-hidden="true">
-          <circle class="ring-track" cx="98" cy="98" r="86"/>
-          <circle class="ring-arc" id="ringArc" cx="98" cy="98" r="86" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${isNum(rec) ? C * (1 - rec / 100) : C}"/>
-        </svg>
-        <div class="ring-center">
-          <div class="ring-value">${isNum(rec) ? `<span data-num="${rec}" data-dp="0" data-key="ring">${rec}</span><small>%</small>` : '—'}</div>
-          <div class="ring-label">Recovery</div>
-          <div class="ring-tier">${t ? t.word : 'Waiting on sleep'}</div>
-        </div>
-      </a>
-      <div class="hero-copy">
-        <p class="eyebrow">${esc(rel ? `${rel} · ${fullDate(iso)}` : fullDate(iso))}</p>
-        <h1 class="hero-head">${esc(story.head)}</h1>
-        <p class="hero-body">${esc(story.body)}</p>
-        <div class="hero-stats">
-          ${pill('strain', 'var(--activity)')}
-          ${pill('sleep', 'var(--sleep)')}
-          ${pill('steps', 'var(--activity)')}
-        </div>
-      </div>
-    </section>
+    ${weekStrip()}
+    ${dials(d)}
+    ${insightCard(d)}
+    ${myDayPanel(d)}
     ${sections}
+    <section class="section"><div class="section-head"><h2>Trends</h2></div>${trendsPanel()}</section>
   `;
 }
 
@@ -988,7 +1188,7 @@ function detailPeriod(key, range, p, color) {
   const band = m.kind === 'line' && !m.domain ? normalRange(key, Math.max(0, endIdx)) : null;
   const chart = slot('period', w => (m.kind === 'bar'
     ? barChart(w, { key, vals, labels, color: key === 'recovery' ? (v => tierOf(v).color) : color, goal: m.goal, tips, hrefs, selPos, domain: m.domain })
-    : lineChart(w, { key, vals, labels, color, tips, hrefs, selPos, band, domain: m.domain, hollow, dotColor: key === 'recovery' ? (v => tierOf(v).color) : null })));
+    : lineChart(w, { key, vals, labels, color: key === 'recovery' ? 'rgba(255, 255, 255, 0.45)' : color, tips, hrefs, selPos, band, domain: m.domain, hollow, dotColor: key === 'recovery' ? (v => tierOf(v).color) : null })));
 
   const headLabel = m.agg === 'sum' ? 'Daily average' : 'Average';
   const valHtml = s ? valueHtml(key, s.avg, 'period-' + key) : '';
@@ -1027,9 +1227,41 @@ function render({ pageEnter = false } = {}) {
   }
   mountCharts(main, true);
   animateNumbers(main);
-  const arc = $('#ringArc');
-  if (arc) requestAnimationFrame(() => requestAnimationFrame(() => { arc.style.strokeDashoffset = arc.dataset.target; }));
+  // Rings start empty and sweep to their value on the next frame.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    main.querySelectorAll('[data-target]').forEach(arc => { arc.style.strokeDashoffset = arc.dataset.target; });
+  }));
+  observeReveals(main);
   if (pageEnter) main.focus({ preventScroll: true });
+}
+
+// Cards fade up as they scroll into view, and their charts draw at that moment
+// rather than off-screen.
+let revealObserver = null;
+function observeReveals(root) {
+  if (revealObserver) revealObserver.disconnect();
+  const items = [...root.querySelectorAll('.reveal')];
+  items.forEach(el => {
+    const siblings = [...el.parentElement.children].filter(c => c.classList.contains('reveal'));
+    el.style.setProperty('--i', Math.min(siblings.indexOf(el), 8));
+  });
+  if (reducedMotion || !('IntersectionObserver' in window)) {
+    items.forEach(el => el.classList.add('in'));
+    return;
+  }
+  revealObserver = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('in');
+      revealObserver.unobserve(e.target);
+      if (e.boundingClientRect.top > window.innerHeight * 0.6) mountCharts(e.target, true);
+    }
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+  items.forEach(el => revealObserver.observe(el));
+  // Safety net: never leave on-screen content hidden if the observer doesn't fire.
+  setTimeout(() => {
+    items.forEach(el => { if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('in'); });
+  }, 1500);
 }
 
 function setDay(i) {

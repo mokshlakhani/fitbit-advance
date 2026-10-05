@@ -12,7 +12,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PUBLIC = {'/index.html', '/styles.css', '/app.js', '/dashboard_data.json', '/demo_data.json'}
+PUBLIC = {'/index.html', '/styles.css', '/app.js', '/icons.js', '/dashboard_data.json', '/demo_data.json'}
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
