@@ -22,3 +22,6 @@ __pycache__/
 
 # Legacy Fitbit Web API tool (superseded by google_health_sync.py)
 fitbit_auto_sync.py
+
+# Personal notes
+to-do list.md
