@@ -1,0 +1,4 @@
+node_modules/
+# Build output; www/seed.json holds personal health data
+www/
+web/

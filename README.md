@@ -65,4 +65,4 @@ By default sign-in uses this project's shared Google client (`oauth_client.json`
 
 ## Credits
 
-Analytics are ported from [OpenStrap](OpenStrap/analytics-main) (MIT). Not affiliated with Google or Fitbit.
+Analytics are ported from [OpenStrap](OpenStrap/analytics-main) (MIT). Icons are [Phosphor Icons](https://phosphoricons.com) (MIT). Not affiliated with Google or Fitbit.

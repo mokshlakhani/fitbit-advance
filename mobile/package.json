@@ -1,0 +1,22 @@
+{
+  "name": "datastrap-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "DataStrap for Android: the dashboard plus on-device analytics and Google Health sync.",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/run.mjs",
+    "sync": "node build.mjs && npx cap sync android",
+    "apk": "node build.mjs && npx cap sync android && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.2",
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2"
+  }
+}

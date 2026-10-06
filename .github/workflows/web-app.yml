@@ -1,0 +1,42 @@
+# Publishes the DataStrap web app (mobile/ built with --web) to GitHub Pages.
+# The site is only code: each person's health data stays on their own device.
+name: Web app
+
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'styles.css', 'app.js', 'icons.js', 'mobile/**', '.github/workflows/web-app.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: node build.mjs --web
+        working-directory: mobile
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: mobile/web
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,151 @@
+/* Android additions: the sync button, the sync sheet and the connect screen. */
+
+body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none; }
+
+.sync-btn { justify-self: end; position: relative; background: var(--card); border: 1px solid var(--line); }
+.sync-btn::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background-color 200ms var(--ease);
+}
+.sync-btn[data-state="signedOut"]::after { background: var(--fair); }
+.sync-btn[data-state="error"]::after { background: var(--poor); }
+.sync-btn[data-state="syncing"] svg { animation: m-rotate 1s linear infinite; color: var(--text); }
+@keyframes m-rotate { to { transform: rotate(360deg); } }
+
+.m-sheet { position: fixed; inset: 0; z-index: 50; }
+.m-sheet[hidden] { display: none; }
+.m-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 220ms var(--ease); }
+.m-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--card);
+  border-top: 1px solid var(--line-strong);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: 8px 20px calc(24px + env(safe-area-inset-bottom));
+  transform: translateY(100%);
+  transition: transform 560ms cubic-bezier(0.32, 1.22, 0.5, 1);
+  /* Room below the edge so the spring's overshoot never shows a gap. */
+  bottom: -40px;
+  padding-bottom: calc(64px + env(safe-area-inset-bottom));
+}
+.m-sheet.open .m-scrim { opacity: 1; }
+.m-sheet.open .m-panel { transform: none; }
+.m-sheet:not(.open) .m-panel { transition-timing-function: var(--ease-out); transition-duration: 220ms; }
+.m-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 0 auto 12px; }
+
+.m-title {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin: 18px 0 8px;
+}
+.m-title:first-child { margin-top: 4px; }
+.m-status { display: flex; align-items: center; gap: 10px; font-size: 1rem; color: var(--text); margin-bottom: 12px; }
+.m-note { font-size: 0.8125rem; color: var(--text-3); margin: 10px 0; }
+.m-error { font-size: 0.8125rem; color: var(--poor); margin: 6px 0 10px; }
+.m-error:empty { display: none; }
+
+.m-btn {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: var(--pill);
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  transition: transform 160ms var(--ease), opacity 160ms var(--ease);
+}
+.m-btn:active:not(:disabled) { transform: scale(0.97); }
+.m-btn:disabled { opacity: 0.4; }
+.m-btn.primary { width: 100%; background: var(--text); color: var(--bg); border-color: transparent; }
+.m-btn.quiet { width: 100%; margin-top: 18px; background: transparent; color: var(--text-3); }
+
+.m-row { display: grid; grid-template-columns: 1fr 88px auto; gap: 8px; }
+.m-input {
+  height: 44px;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  color-scheme: dark;
+}
+
+.m-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--text);
+  animation: m-rotate 0.8s linear infinite;
+}
+
+.m-connect { max-width: 480px; margin: 12vh auto 0; text-align: center; display: grid; gap: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-btn[data-state="syncing"] svg, .m-spin { animation-duration: 3s; }
+  .m-panel, .m-scrim { transition: none; }
+}
+
+/* The desktop header drops its third column on narrow screens; the app keeps it for the sync button. */
+@media (max-width: 720px) {
+  .bar-inner { grid-template-columns: auto 1fr auto; }
+}
+
+.m-field { display: grid; gap: 6px; font-size: 0.875rem; color: var(--text-2); }
+.m-field small { color: var(--text-3); }
+.m-field select { appearance: none; }
+.m-file { display: grid; place-items: center; width: 100%; cursor: pointer; }
+.m-empty .date-nav, .m-empty .foot { visibility: hidden; }
+
+/* Pull to refresh */
+.m-ptr {
+  position: fixed;
+  z-index: 25;
+  top: calc(env(safe-area-inset-top) + 64px);
+  left: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--text-2);
+  opacity: 0;
+  transform: translate(-50%, -20px);
+  transition: transform 480ms cubic-bezier(0.34, 1.6, 0.5, 1), opacity 200ms, color 160ms, background-color 160ms;
+  pointer-events: none;
+}
+.m-ptr svg { width: 20px; height: 20px; fill: currentColor; }
+.m-ptr.dragging { transition: opacity 120ms; }
+.m-ptr.ready { color: var(--bg); background: var(--text); }
+.m-ptr.spinning { opacity: 1; transform: translate(-50%, 56px); color: var(--text); }
+.m-ptr.spinning svg { animation: m-rotate 0.9s linear infinite; }
+
+/* First download */
+.m-first { margin-top: 8vh; justify-items: center; }
+.m-first .detail-title { justify-content: center; }
+.m-first-ring { width: 64px; height: 64px; border-radius: 50%; border: 5px solid var(--raised); border-top-color: var(--good); animation: m-rotate 1.1s cubic-bezier(0.5, 0.15, 0.5, 0.85) infinite; }
+.m-skeleton { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.m-skeleton i { height: 140px; border-radius: 20px; background: linear-gradient(100deg, var(--card) 30%, var(--card-2) 50%, var(--card) 70%) 0 0 / 300% 100%; animation: m-shimmer 1.6s linear infinite; }
+.m-skeleton i:first-child { grid-column: 1 / -1; height: 220px; }
+@keyframes m-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }

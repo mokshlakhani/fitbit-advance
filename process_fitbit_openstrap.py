@@ -9,8 +9,17 @@ from datetime import datetime, timedelta
 import api_ingest
 import profile_store
 import sleep_score
+import body_age
 
-BASELINE_DAYS = 14  # trailing window for recovery z-scores
+# Recovery baselines (OpenStrap readiness_composite.dart): each vital is compared
+# with its own most recent BASELINE_READINGS nightly values, taken from at most
+# the previous BASELINE_MAX_AGE days. Fewer readings than that is not a baseline,
+# so the vital sits out; with fewer than MIN_INPUTS vitals (or under MIN_WEIGHT of
+# the disclosed weight) there is no recovery score that night.
+BASELINE_READINGS = 14
+BASELINE_MAX_AGE = 28
+MIN_INPUTS = 2
+MIN_WEIGHT = 0.5
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Optional Google Takeout export (history from before the Google Health API
@@ -319,64 +328,136 @@ def load_workouts():
                 name = ex.get('activityName', 'Workout')
                 
                 time_str = ex.get('startTime', '').split()[-1][:5]
-                
+                dist = ex.get('distance')
+                if dist is not None and (ex.get('distanceUnit') or '').lower().startswith('mile'):
+                    dist = dist * 1.609344
+                azm = (ex.get('activeZoneMinutes') or {}).get('totalMinutes')
+
                 workouts.setdefault(iso, []).append({
                     'name': name,
                     'duration_minutes': dur_mins,
                     'calories': cal,
                     'avg_hr': avg_hr,
-                    'time': time_str
+                    'time': time_str,
+                    'steps': ex.get('steps'),
+                    'distance_km': round(dist, 2) if dist else None,
+                    'elevation_m': round(ex['elevationGain']) if ex.get('elevationGain') else None,
+                    'active_zone_minutes': azm,
                 })
     return workouts
 
+def _workout_windows(workouts_by_date):
+    """{date: [(start, end + tail), ...]} in seconds since local midnight."""
+    out = {}
+    for dt, ws in workouts_by_date.items():
+        for w in ws:
+            win = workout_window(w)
+            if win:
+                out.setdefault(dt, []).append((win[0], win[1] + WORKOUT_TAIL_S))
+    return out
+
+
+def select_workout_samples(local_times, bpms, windows):
+    """Raw readings that fall in a workout window, as {date: [[seconds, bpm], ...]} sorted."""
+    if not windows or not len(bpms):
+        return {}
+    ts = pd.DatetimeIndex(local_times)
+    df = pd.DataFrame({'date': ts.strftime('%Y-%m-%d'),
+                       'sec': ts.hour * 3600 + ts.minute * 60 + ts.second,
+                       'bpm': np.asarray(bpms, dtype=int)})
+    df = df[df['date'].isin(windows.keys())]
+    out = {}
+    for dt, g in df.groupby('date'):
+        keep = np.zeros(len(g), dtype=bool)
+        sec = g['sec'].to_numpy()
+        for lo, hi in windows[dt]:
+            keep |= (sec >= lo) & (sec < hi)
+        rows = g[keep].sort_values(['sec', 'bpm'])
+        if len(rows):
+            out[dt] = rows[['sec', 'bpm']].astype(int).values.tolist()
+    return out
+
+
+_TAKEOUT_HR = None
+
+
+def _takeout_hr():
+    """Every Takeout heart-rate reading as a DataFrame (local time, bpm), loaded once."""
+    global _TAKEOUT_HR
+    if _TAKEOUT_HR is None:
+        times, bpms = [], []
+        for f in sorted(glob.glob(os.path.join(BASE_DIR, 'Global Export Data', 'heart_rate-*.json'))):
+            try:
+                with open(f) as fp:
+                    for item in json.load(fp):
+                        times.append(item['dateTime'])
+                        bpms.append(item['value']['bpm'])
+            except Exception:
+                pass
+        utc = pd.to_datetime(pd.Series(times, dtype=object), format='%m/%d/%y %H:%M:%S', utc=True)
+        local = utc.dt.tz_convert(profile_store.local_tz()).dt.tz_localize(None)
+        _TAKEOUT_HR = pd.DataFrame({'time': local, 'bpm': bpms})
+    return _TAKEOUT_HR
+
+
+def load_workout_samples_takeout(workouts_by_date):
+    windows = _workout_windows(workouts_by_date)
+    df = _takeout_hr()
+    if not windows or df.empty:
+        return {}
+    return select_workout_samples(df['time'], df['bpm'].tolist(), windows)
+
+
 def load_intraday_hr():
+    """Per-minute mean BPM by local day from the Takeout readings."""
+    df = _takeout_hr()
+    if df.empty:
+        return {}
+    g = pd.DataFrame({'date': df['time'].dt.strftime('%Y-%m-%d'), 'hm': df['time'].dt.strftime('%H:%M'), 'bpm': df['bpm']})
     daily_hr = {}
-    # Files hold UTC days, so bucket every sample by its local date and minute.
-    buckets = {}
-    for f in glob.glob(os.path.join(BASE_DIR, 'Global Export Data', 'heart_rate-*.json')):
-        try:
-            with open(f) as fp:
-                for item in json.load(fp):
-                    dt_local = _takeout_local(item['dateTime'])
-                    day = buckets.setdefault(dt_local.strftime('%Y-%m-%d'), {})
-                    day.setdefault(dt_local.strftime('%H:%M'), []).append(item['value']['bpm'])
-        except Exception:
-            pass
-    for dt_str, minutes in buckets.items():
-        daily_hr[dt_str] = [{'time': hm, 'bpm': round(float(np.mean(v)))} for hm, v in sorted(minutes.items())]
+    for (dt_str, hm), v in g.groupby(['date', 'hm'])['bpm']:
+        daily_hr.setdefault(dt_str, []).append({'time': hm, 'bpm': round(float(np.mean(v.to_numpy())))})
     return daily_hr
 
 # Banister TRIMP weighting y = a·exp(b·HRR): published coefficients for men and
 # women; their midpoint when sex isn't known.
 TRIMP_COEF = {'male': (0.64, 1.92), 'female': (0.86, 1.67), None: (0.75, 1.795)}
+# Heart-rate zones as shares of heart-rate reserve, the cut-offs Fitbit uses
+# for Active Zone Minutes: light < 40%, moderate 40-59%, vigorous 60-84%,
+# peak 85%+.
+ZONES = [('peak', 0.85), ('vigorous', 0.60), ('moderate', 0.40), ('light', 0.0)]
 
-def calculate_trimp_and_strain(minute_hr_series, resting_hr, max_hr=190, sex=None):
+
+def hr_zone(hrr):
+    return next(name for name, lo in ZONES if hrr >= lo)
+
+
+# Only minutes at or above light activity count towards strain: 30% of heart-rate
+# reserve is where ACSM's "light" intensity starts. Below it (sleep, sitting,
+# pottering about) the heart is above resting but not training.
+ACTIVE_HRR = 0.30
+
+def calculate_trimp_and_strain(minute_hr_series, resting_hr, max_hr=190, sex=None, zone_max_hr=None):
     a, b = TRIMP_COEF.get(sex, TRIMP_COEF[None])
     if not minute_hr_series or resting_hr is None or resting_hr >= max_hr:
-        return 0.0, 0.0, {'rest': 100, 'fat_burn': 0, 'cardio': 0, 'peak': 0}
+        return 0.0, 0.0, {'light': 100, 'moderate': 0, 'vigorous': 0, 'peak': 0}
         
     reserve = max_hr - resting_hr
+    zone_reserve = max((zone_max_hr or max_hr) - resting_hr, 1)
     trimp = 0.0
-    zones = {'rest': 0, 'fat_burn': 0, 'cardio': 0, 'peak': 0}
+    zones = {'light': 0, 'moderate': 0, 'vigorous': 0, 'peak': 0}
     
     for pt in minute_hr_series:
         hr = pt['bpm']
         if hr <= resting_hr:
-            zones['rest'] += 1
+            zones['light'] += 1
             continue
             
         hrr = min(1.0, max(0.0, (hr - resting_hr) / reserve))
-        
-        # Karvonen Zone classification
-        if hrr >= 0.85:
-            zones['peak'] += 1
-        elif hrr >= 0.70:
-            zones['cardio'] += 1
-        elif hrr >= 0.50:
-            zones['fat_burn'] += 1
-        else:
-            zones['rest'] += 1
-            
+        zones[hr_zone(min(1.0, (hr - resting_hr) / zone_reserve))] += 1
+
+        if hrr < ACTIVE_HRR:
+            continue
         y = a * math.exp(b * hrr)
         trimp += 1.0 * hrr * y
         
@@ -390,35 +471,256 @@ def calculate_trimp_and_strain(minute_hr_series, resting_hr, max_hr=190, sex=Non
     
     return round(trimp, 1), strain, zone_pct
 
-def calculate_body_age(chronological_age, vo2_max, resting_hr, bmi):
-    if vo2_max is None or chronological_age is None:
-        return None, None
-    if resting_hr is None:
-        resting_hr = 64
-        
-    expected_vo2 = 54.4 - 0.38 * chronological_age
-    vo2_delta = vo2_max - expected_vo2
-    
-    age_offset = vo2_delta * 0.45
-    rhr_offset = (64 - resting_hr) * 0.1
-    
-    fitness_age = max(18.0, round(chronological_age - age_offset - rhr_offset, 1))
-    vitality_index = min(99, max(75, round(70 + (vo2_max - 50) * 1.8)))
-    
-    return fitness_age, vitality_index
 
-def vo2_tier(vo2, age):
-    """VO2max relative to the expected value for age (54.4 - 0.38·age)."""
-    if vo2 is None or age is None:
+# ---------- Workouts ----------
+WORKOUT_TAIL_S = 150   # samples kept after a workout ends, for heart-rate recovery
+MAX_SAMPLE_GAP_S = 10  # a reading counts for at most this long (gaps aren't filled)
+
+
+def workout_window(w):
+    """(start, end) of a workout in seconds since local midnight, or None."""
+    try:
+        h, m = (int(x) for x in (w.get('time') or '').split(':'))
+    except ValueError:
         return None
-    delta = vo2 - (54.4 - 0.38 * age)
-    if delta >= 10:
-        return 'Elite for your age'
-    if delta >= 5:
-        return 'Excellent for your age'
-    if delta >= 0:
-        return 'Above average for your age'
-    return 'Below average for your age'
+    start = h * 3600 + m * 60
+    return start, min(86400, start + max(1, int(w.get('duration_minutes') or 0)) * 60)
+
+
+def _mean_bpm(samples, lo, hi):
+    vals = [b for t, b in samples if lo <= t < hi]
+    return sum(vals) / len(vals) if vals else None
+
+
+def analyse_workout(w, minute_hr, samples, resting_hr, max_hr=190, sex=None, zone_max_hr=None):
+    """A workout with its heart rate rebuilt from the raw readings (about every 2 s).
+
+    `samples` is the day's [seconds since local midnight, bpm] readings around
+    workouts. Each reading counts for the time until the next one (at most
+    MAX_SAMPLE_GAP_S). Falls back to the day's per-minute averages when there
+    are no raw readings. Adds: the heart-rate series, peak and average, time in
+    each zone (same heart-rate-reserve zones as the day), the workout's own
+    TRIMP and strain, and heart-rate recovery 1 and 2 minutes after it ended.
+    """
+    out = dict(w, hr_resolution=None, hr_t=[], hr_bpm=[], peak_hr=None, avg_hr_measured=None,
+               zone_minutes=None, trimp=None, strain=None, hr_recovery=None, hr_recovery_60=None)
+    win = workout_window(w)
+    if win is None:
+        return out
+    start, end = win
+    a, b = TRIMP_COEF.get(sex, TRIMP_COEF[None])
+    raw = [(t, bpm) for t, bpm in (samples or []) if start <= t < end]
+    if len(raw) >= 10:
+        times = [t for t, _ in raw]
+        bpms = [bpm for _, bpm in raw]
+        durs = [min(times[i + 1] - times[i], MAX_SAMPLE_GAP_S) for i in range(len(times) - 1)]
+        durs.append(min(end - times[-1], MAX_SAMPLE_GAP_S))
+        out['hr_resolution'] = 'second'
+        out['hr_t'] = [t - start for t in times]
+        out['hr_bpm'] = bpms
+        end_bpm = _mean_bpm(samples, end - 10, end)
+        for key, lag in (('hr_recovery_60', 60), ('hr_recovery', 120)):
+            later = _mean_bpm(samples, end + lag - 5, end + lag + 5)
+            if end_bpm is not None and later is not None:
+                out[key] = int(round(end_bpm - later))
+    else:
+        by_min = {}
+        for pt in minute_hr:
+            hh, mm = pt['time'].split(':')
+            by_min[int(hh) * 3600 + int(mm) * 60] = pt['bpm']
+        series = [(t, by_min[t]) for t in range(start - start % 60, end, 60) if t in by_min and t >= start]
+        if not series:
+            return out
+        times = [t for t, _ in series]
+        bpms = [bpm for _, bpm in series]
+        durs = [60] * len(bpms)
+        out['hr_resolution'] = 'minute'
+        out['hr_t'] = [t - start for t in times]
+        out['hr_bpm'] = bpms
+        after, last = by_min.get(end + 60), by_min.get(end - 60)
+        if after is not None and last is not None:
+            out['hr_recovery'] = last - after
+    total = sum(durs)
+    out['peak_hr'] = max(bpms)
+    out['avg_hr_measured'] = int(round(sum(x * d for x, d in zip(bpms, durs)) / total)) if total else int(round(sum(bpms) / len(bpms)))
+    if resting_hr is None or resting_hr >= max_hr or not total:
+        return out
+    reserve = max_hr - resting_hr
+    zone_reserve = max((zone_max_hr or max_hr) - resting_hr, 1)
+    zone_s = {'light': 0, 'moderate': 0, 'vigorous': 0, 'peak': 0}
+    trimp = 0.0
+    for x, d in zip(bpms, durs):
+        hrr = min(1.0, max(0.0, (x - resting_hr) / reserve))
+        zone_s[hr_zone(min(1.0, max(0.0, (x - resting_hr) / zone_reserve)))] += d
+        if x > resting_hr and hrr >= ACTIVE_HRR:
+            trimp += hrr * (a * math.exp(b * hrr)) * d / 60.0
+    out['trimp'] = round(trimp, 1)
+    out['strain'] = min(21.0, max(0.0, round(21.0 * math.log(1.0 + trimp) / math.log(7201.0), 1)))
+    out['zone_minutes'] = {k: round(v / 60.0, 1) for k, v in zone_s.items()}
+    return out
+
+
+# ---------- Recovery (OpenStrap readiness composite) ----------
+# (key, label, disclosed weight, orientation)
+RECOVERY_INPUTS = [
+    ('hrv', 'HRV (RMSSD)', 0.40, 'higher'),
+    ('rhr', 'Resting Heart Rate', 0.30, 'lower'),
+    ('resp', 'Respiratory Rate', 0.20, 'steady'),
+    ('temp', 'Skin Temperature', 0.10, 'steady'),
+]
+# Breathing rate and skin temperature are warning signs when they move away
+# from normal, a rise twice as much as a fall: a lower reading is not "better
+# recovered" (OpenStrap's own notes flag the old lower-is-better sign for
+# temperature). STEADY_CENTER = E[max(z,0) + 0.5·max(-z,0)] for a normal z
+# = 1.5/sqrt(2*pi), so an ordinary night adds nothing on average.
+STEADY_CENTER = 1.5 / math.sqrt(2 * math.pi)
+
+
+def baseline_for(history, dt):
+    """The most recent BASELINE_READINGS values from the BASELINE_MAX_AGE days before dt, or None."""
+    cutoff = (datetime.strptime(dt, '%Y-%m-%d') - timedelta(days=BASELINE_MAX_AGE)).strftime('%Y-%m-%d')
+    vals = [v for d, v in history if cutoff <= d < dt]
+    return vals[-BASELINE_READINGS:] if len(vals) >= BASELINE_READINGS else None
+
+
+def orient(z, how):
+    """Sign a z-score so that positive means good for recovery."""
+    if how == 'higher':
+        return z
+    if how == 'lower':
+        return -z
+    return STEADY_CENTER - max(z, 0.0) - 0.5 * max(-z, 0.0)
+
+
+def recovery_composite(values, histories, dt):
+    """(score, composite_z, drivers, inputs_used) for one night; score is None without enough baseline.
+
+    Each driver's points are its share of (score - 50), so the drivers add up
+    to how far the score is from a neutral 50.
+    """
+    used = []
+    for key, label, weight, how in RECOVERY_INPUTS:
+        v = values.get(key)
+        if not v:
+            continue
+        base = baseline_for(histories[key], dt)
+        if base is None:
+            continue
+        # Resting HR comes in whole bpm: a baseline with less than 1 bpm of spread
+        # has no measurable variation to compare against.
+        if key == 'rhr' and float(np.std(base)) < 1.0:
+            continue
+        used.append((label, weight, orient(robust_z(v, base), how)))
+    weight_sum = sum(w for _, w, _ in used)
+    if len(used) < MIN_INPUTS or weight_sum < MIN_WEIGHT:
+        return None, None, [], len(used)
+    composite = sum(w * o for _, w, o in used) / weight_sum
+    score = 100.0 / (1.0 + math.exp(-composite))
+    drivers = []
+    for label, weight, o in used:
+        share = weight * o / weight_sum
+        points = (score - 50.0) * share / composite if abs(composite) > 1e-9 else 25.0 * share
+        drivers.append({'metric': label, 'weight': weight, 'z': round(o, 2), 'impact': round(points, 1),
+                        'direction': 'positive' if o > 0 else 'negative'})
+    drivers.sort(key=lambda x: abs(x['impact']), reverse=True)
+    return int(round(score)), composite, drivers, len(used)
+
+
+def nightly_stress(rmssd, rhr, histories, dt):
+    """0-100: how far resting HR is above, and HRV below, your own baseline (50 = typical)."""
+    if not rmssd or not rhr:
+        return None
+    base_hrv = baseline_for(histories['hrv'], dt)
+    base_rhr = baseline_for(histories['rhr'], dt)
+    if base_hrv is None or base_rhr is None:
+        return None
+    s = (robust_z(rhr, base_rhr) - robust_z(rmssd, base_hrv)) / 2.0
+    return int(round(100.0 / (1.0 + math.exp(-s))))
+
+
+# ---------- Fitness age (VO2max against population norms) ----------
+# Loe H, Rognmo Ø, Saltin B, Wisløff U (2013). Aerobic capacity reference data
+# in 3816 healthy men and women 20-90 years. PLOS ONE 8(5): e64319 (HUNT3
+# Fitness Study), Table 2: VO2max mL/kg/min, mean and SD, by age group.
+# Keyed by each group's middle age; 70+ is placed at 75.
+VO2_NORMS = [
+    # age, men mean, men SD, women mean, women SD
+    (25, 54.4, 8.4, 43.0, 7.7),
+    (35, 49.1, 7.5, 40.0, 6.8),
+    (45, 47.2, 7.7, 38.4, 6.9),
+    (55, 42.6, 7.4, 34.4, 5.7),
+    (65, 39.2, 6.7, 31.1, 5.1),
+    (75, 35.3, 6.5, 28.3, 5.2),
+]
+VO2_CARRY_DAYS = 30  # use a VO2max estimate for at most this long after it was measured
+
+
+def _norm_row(row, sex):
+    _, mm, ms, wm, ws = row
+    if sex == 'male':
+        return mm, ms
+    if sex == 'female':
+        return wm, ws
+    return (mm + wm) / 2.0, (ms + ws) / 2.0
+
+
+def vo2_norm(age, sex):
+    """(mean, SD) VO2max for this age and sex, interpolated between age groups."""
+    if age <= VO2_NORMS[0][0]:
+        return _norm_row(VO2_NORMS[0], sex)
+    for lo, hi in zip(VO2_NORMS, VO2_NORMS[1:]):
+        if age <= hi[0]:
+            f = (age - lo[0]) / (hi[0] - lo[0])
+            (m0, s0), (m1, s1) = _norm_row(lo, sex), _norm_row(hi, sex)
+            return m0 + f * (m1 - m0), s0 + f * (s1 - s0)
+    return _norm_row(VO2_NORMS[-1], sex)
+
+
+def _erf(x):
+    # Abramowitz & Stegun 7.1.26 (error < 1.5e-7); written out so the phone
+    # version (mobile/src/engine.js) computes exactly the same numbers.
+    sign = -1.0 if x < 0 else 1.0
+    x = abs(x)
+    t = 1.0 / (1.0 + 0.3275911 * x)
+    y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * math.exp(-x * x)
+    return sign * y
+
+
+def fitness_profile(age, sex, vo2):
+    """Fitness age, percentile and tier from VO2max against same-sex norms.
+
+    Fitness age is the age whose average VO2max matches yours. The norms start
+    at the 20-29 group (centred on 25) and end at 70+ (75), so it is limited to
+    25-75: 'lower' means 25 or younger, 'upper' means 75 or older.
+    """
+    out = {'fitness_age': None, 'fitness_age_limit': None, 'age_delta': None, 'percentile': None, 'tier': None}
+    if vo2 is None:
+        return out
+    means = [_norm_row(r, sex)[0] for r in VO2_NORMS]
+    ages = [r[0] for r in VO2_NORMS]
+    if vo2 >= means[0]:
+        fit_age, limit = float(ages[0]), 'lower'
+    elif vo2 <= means[-1]:
+        fit_age, limit = float(ages[-1]), 'upper'
+    else:
+        fit_age, limit = None, None
+        for (a0, m0), (a1, m1) in zip(zip(ages, means), zip(ages[1:], means[1:])):
+            if m0 >= vo2 >= m1:
+                fit_age = a0 + (m0 - vo2) / (m0 - m1) * (a1 - a0)
+                break
+    out['fitness_age'] = round(fit_age, 1)
+    out['fitness_age_limit'] = limit
+    if age is not None:
+        if limit is None:
+            out['age_delta'] = round(fit_age - age, 1)
+        mean, sd = vo2_norm(age, sex)
+        pct = 50.0 * (1.0 + _erf((vo2 - mean) / sd / math.sqrt(2.0)))
+        out['percentile'] = int(min(99, max(1, round(pct))))
+        p = out['percentile']
+        out['tier'] = ('Elite for your age' if p >= 90 else 'Excellent for your age' if p >= 75
+                       else 'Above average for your age' if p >= 50 else 'Below average for your age' if p >= 25
+                       else 'Low for your age')
+    return out
 
 def assemble(src, profile, labels_path):
     """Per-day analytics (recovery, strain, sleep, body age, sleep score) from loaded sources.
@@ -455,11 +757,10 @@ def assemble(src, profile, labels_path):
         raise SystemExit("No data yet. Run `python3 setup.py` to connect your Fitbit, then try again.")
     print(f"Processing {len(all_dates)} days from {all_dates[0]} to {all_dates[-1]}...")
     
-    history_hrv = []
-    history_rhr = []
-    history_resp = []
-    history_temp = []
+    # (date, value) per vital, for the recovery and stress baselines.
+    histories = {'hrv': [], 'rhr': [], 'resp': [], 'temp': []}
     last_vo2 = None
+    last_vo2_date = None
     
     daily_records = []
     
@@ -475,10 +776,11 @@ def assemble(src, profile, labels_path):
         # instead of a made-up default.
         spo2_entry = spo2_data.get(dt)
         # VO2max changes slowly and is only exported occasionally: carry the
-        # last measured value forward.
+        # last measured value forward, for up to VO2_CARRY_DAYS.
         if dt in vo2_data:
-            last_vo2 = vo2_data[dt]
-        vo2 = last_vo2
+            last_vo2, last_vo2_date = vo2_data[dt], dt
+        age_days = (datetime.strptime(dt, '%Y-%m-%d') - datetime.strptime(last_vo2_date, '%Y-%m-%d')).days if last_vo2_date else None
+        vo2 = last_vo2 if age_days is not None and age_days <= VO2_CARRY_DAYS else None
         steps = steps_data.get(dt)
         cals = cal_data.get(dt)
         day_workouts = workouts_data.get(dt, [])
@@ -486,25 +788,18 @@ def assemble(src, profile, labels_path):
         # Fitbit's measured nightly breathing rate.
         resp_rate = resp_data.get(dt)
         
-        # OpenStrap Readiness Composite: each vital against its trailing
-        # BASELINE_DAYS, weights renormalised over the vitals present today.
-        components = []  # (weight, sign, z)
-        if rmssd: components.append((0.40, 1, robust_z(rmssd, history_hrv[-BASELINE_DAYS:])))
-        if rhr: components.append((0.30, -1, robust_z(rhr, history_rhr[-BASELINE_DAYS:])))
-        if resp_rate: components.append((0.20, -1, robust_z(resp_rate, history_resp[-BASELINE_DAYS:])))
-        if temp: components.append((0.10, -1, robust_z(temp, history_temp[-BASELINE_DAYS:])))
-        z_hrv = robust_z(rmssd, history_hrv[-BASELINE_DAYS:]) if rmssd else 0.0
-        z_rhr = robust_z(rhr, history_rhr[-BASELINE_DAYS:]) if rhr else 0.0
-        z_resp = robust_z(resp_rate, history_resp[-BASELINE_DAYS:]) if resp_rate else 0.0
-        z_temp = robust_z(temp, history_temp[-BASELINE_DAYS:]) if temp else 0.0
-        
-        w_sum = sum(w for w, _, _ in components)
-        composite_z = sum(w * sign * z for w, sign, z in components) / w_sum if w_sum else 0.0
-        
-        raw_recovery = 100.0 / (1.0 + math.exp(-composite_z))
-        recovery_score = int(round(min(98, max(22, raw_recovery * 0.8 + 20))))
-        
-        if recovery_score >= 67:
+        # OpenStrap readiness composite: each vital against its own baseline,
+        # weights renormalised over the vitals that have one.
+        recovery_score, composite_z, drivers, inputs_used = recovery_composite(
+            {'hrv': rmssd, 'rhr': rhr, 'resp': resp_rate, 'temp': temp}, histories, dt)
+
+        if recovery_score is None:
+            recovery_status = 'Calibrating'
+            recovery_color = '#6B7280'
+            target_strain = None
+            coach_tip = (f'Recovery starts once at least two vitals have {BASELINE_READINGS} nights of data '
+                         f'in the last {BASELINE_MAX_AGE} days.')
+        elif recovery_score >= 67:
             recovery_status = 'Optimal'
             recovery_color = '#10B981'
             target_strain = '14.0 – 18.0'
@@ -519,21 +814,12 @@ def assemble(src, profile, labels_path):
             recovery_color = '#EF4444'
             target_strain = '< 10.0'
             coach_tip = 'Autonomic indicators show elevated fatigue. Prioritize sleep and active recovery.'
-            
-        drivers = []
-        if rmssd:
-            drivers.append({'metric': 'HRV (RMSSD)', 'weight': 0.40, 'z': round(z_hrv, 2), 'impact': round(0.40 * z_hrv * 15, 1), 'direction': 'positive' if z_hrv > 0 else 'negative'})
-        if rhr:
-            drivers.append({'metric': 'Resting Heart Rate', 'weight': 0.30, 'z': round(-z_rhr, 2), 'impact': round(-0.30 * z_rhr * 15, 1), 'direction': 'positive' if z_rhr < 0 else 'negative'})
-        if resp_rate:
-            drivers.append({'metric': 'Respiratory Rate', 'weight': 0.20, 'z': round(-z_resp, 2), 'impact': round(-0.20 * z_resp * 15, 1), 'direction': 'positive' if z_resp < 0 else 'negative'})
-        if temp:
-            drivers.append({'metric': 'Skin Temperature', 'weight': 0.10, 'z': round(-z_temp, 2), 'impact': round(-0.10 * z_temp * 15, 1), 'direction': 'positive' if z_temp < 0 else 'negative'})
-        drivers.sort(key=lambda x: abs(x['impact']), reverse=True)
-        
+
         # Intraday HR & Strain
         minute_hr = intraday_hr.get(dt, [])
-        trimp, day_strain, hr_zones = calculate_trimp_and_strain(minute_hr, rhr, profile['max_hr'], profile['sex'])
+        trimp, day_strain, hr_zones = calculate_trimp_and_strain(minute_hr, rhr, profile['max_hr'], profile['sex'], profile.get('zone_max_hr'))
+        day_samples = src.get('workout_hr', {}).get(dt)
+        day_workouts = [analyse_workout(w, minute_hr, day_samples, rhr, profile['max_hr'], profile['sex'], profile.get('zone_max_hr')) for w in day_workouts]
         
         # Sleep details: only from a recorded main sleep, never estimated.
         minutes_asleep = sleep_entry.get('minutesAsleep') or None
@@ -547,11 +833,8 @@ def assemble(src, profile, labels_path):
         
         sleep_debt_minutes = max(0, 480 - minutes_asleep) if has_sleep else None
         
-        # Body age
-        body_age, vitality = calculate_body_age(profile['chronological_age'], vo2, rhr, profile['bmi'])
-        
-        # Baevsky Stress Index
-        baevsky_si = round(min(120, max(20, (100 - rmssd * 0.8) + (70 - rhr) * 0.5)), 1) if rmssd and rhr else None
+        fitness = fitness_profile(profile['chronological_age'], profile['sex'], vo2)
+        stress = nightly_stress(rmssd, rhr, histories, dt)
         
         # Downsampled HR series for intraday sparkline chart (every 10 mins)
         intraday_spark = [minute_hr[i] for i in range(0, len(minute_hr), 10)] if len(minute_hr) > 0 else []
@@ -563,7 +846,8 @@ def assemble(src, profile, labels_path):
                 'score': recovery_score,
                 'status': recovery_status,
                 'color': recovery_color,
-                'composite_z': round(composite_z, 2),
+                'composite_z': round(composite_z, 2) if composite_z is not None else None,
+                'inputs_used': inputs_used,
                 'target_strain': target_strain,
                 'coach_tip': coach_tip,
                 'drivers': drivers
@@ -593,15 +877,9 @@ def assemble(src, profile, labels_path):
                 'spo2': spo2_entry['avg'] if spo2_entry else None,
                 'temp': round(temp, 2) if temp else None,
                 'respiration_rate': resp_rate,
-                'stress_index': baevsky_si
+                'stress_index': stress
             },
-            'body_age': {
-                'chronological': profile['chronological_age'],
-                'fitness_age': body_age,
-                'age_delta': round(body_age - profile['chronological_age'], 1) if body_age is not None else None,
-                'vitality_index': vitality,
-                'tier': vo2_tier(vo2, profile['chronological_age'])
-            },
+            'body_age': {'chronological': profile['chronological_age'], **fitness},
             'strain': {
                 'score': day_strain,
                 'trimp': trimp,
@@ -611,6 +889,11 @@ def assemble(src, profile, labels_path):
                 'zone_minutes': {k: round(v / 100 * len(minute_hr)) for k, v in hr_zones.items()} if minute_hr else None,
                 'workouts': day_workouts,
                 'intraday_hr': intraday_spark,
+                # From the per-minute averages, not the 10-minute sparkline above.
+                'hr_stats': ({'avg': int(round(sum(p['bpm'] for p in minute_hr) / len(minute_hr))),
+                              'min': min(p['bpm'] for p in minute_hr),
+                              'max': max(p['bpm'] for p in minute_hr),
+                              'max_time': max(minute_hr, key=lambda p: p['bpm'])['time']} if minute_hr else None),
                 'hourly_steps': hourly_steps.get(dt),
                 'hourly_calories': hourly_cals.get(dt)
             }
@@ -618,21 +901,22 @@ def assemble(src, profile, labels_path):
         
         daily_records.append(record)
         
-        if rmssd: history_hrv.append(rmssd)
-        if rhr: history_rhr.append(rhr)
-        if resp_rate: history_resp.append(resp_rate)
-        if temp: history_temp.append(temp)
+        for key, v in (('hrv', rmssd), ('rhr', rhr), ('resp', resp_rate), ('temp', temp)):
+            if v:
+                histories[key].append((dt, v))
 
     daily_records.sort(key=lambda x: x['date'])
 
     # Sleep score: Fitbit app scores where recorded, an estimate elsewhere.
     score_model = sleep_score.apply(daily_records, labels_path)
+    body_age.apply(daily_records, profile)
     accuracy = (f"typical error ±{score_model['mae']} over {score_model['training_nights']} nights"
                 if score_model['method'] == 'fit' else 'default weights until 15 app scores are recorded')
     print(f"Sleep score: {score_model['app_nights']} nights from the Fitbit app, "
           f"{score_model['estimated_nights']} estimated ({accuracy}).")
 
-    all_recoveries = [r['recovery']['score'] for r in daily_records]
+    all_recoveries = [r['recovery']['score'] for r in daily_records if r['recovery']['score'] is not None]
+    scored = [r for r in daily_records if r['recovery']['score'] is not None]
     all_sleeps = [r['sleep']['score'] for r in daily_records if r['sleep']['score']]
     all_strains = [r['strain']['score'] for r in daily_records]
     all_hrvs = [r['cardiovascular']['hrv_rmssd'] for r in daily_records if r['cardiovascular']['hrv_rmssd']]
@@ -642,12 +926,12 @@ def assemble(src, profile, labels_path):
         'total_days_analyzed': len(daily_records),
         'date_start': daily_records[0]['date'],
         'date_end': daily_records[-1]['date'],
-        'avg_recovery': round(float(np.mean(all_recoveries)), 1),
+        'avg_recovery': round(float(np.mean(all_recoveries)), 1) if all_recoveries else None,
         'avg_sleep_score': round(float(np.mean(all_sleeps)), 1) if all_sleeps else None,
         'avg_strain': round(float(np.mean(all_strains)), 1),
-        'avg_hrv': round(float(np.mean(all_hrvs)), 1),
-        'avg_rhr': round(float(np.mean(all_rhrs)), 1),
-        'best_recovery_day': max(daily_records, key=lambda x: x['recovery']['score'])['date'],
+        'avg_hrv': round(float(np.mean(all_hrvs)), 1) if all_hrvs else None,
+        'avg_rhr': round(float(np.mean(all_rhrs)), 1) if all_rhrs else None,
+        'best_recovery_day': max(scored, key=lambda x: x['recovery']['score'])['date'] if scored else None,
         'highest_strain_day': max(daily_records, key=lambda x: x['strain']['score'])['date'],
         'sleep_score_model': score_model,
     }
@@ -701,6 +985,10 @@ def build_dataset():
     # merge per day rather than replace.
     for dt, entry in load_sleep_sessions().items():
         sleep_data.setdefault(dt, {}).update(entry)
+    # Raw heart rate around each workout, for the workout pages: the API's
+    # readings where it has them, the export's otherwise.
+    workout_hr = load_workout_samples_takeout(workouts_data)
+    workout_hr.update(api_ingest.load_workout_samples(workouts_data, select_workout_samples, _workout_windows))
     for dt, entry in api_ingest.load_sleep_data().items():
         cur = sleep_data.setdefault(dt, {})
         # Don't let a shorter API session (e.g. a nap, when the API is missing
@@ -709,7 +997,7 @@ def build_dataset():
             continue
         cur.update(entry)
     
-    src = {'hrv': hrv_data, 'sleep': sleep_data, 'temp': temp_data, 'spo2': spo2_data, 'vo2': vo2_data, 'steps': steps_data, 'cal': cal_data, 'hourly_steps': hourly_steps, 'hourly_cals': hourly_cals, 'resp': resp_data, 'rhr': rhr_data, 'intraday_hr': intraday_hr, 'workouts': workouts_data}
+    src = {'workout_hr': workout_hr, 'hrv': hrv_data, 'sleep': sleep_data, 'temp': temp_data, 'spo2': spo2_data, 'vo2': vo2_data, 'steps': steps_data, 'cal': cal_data, 'hourly_steps': hourly_steps, 'hourly_cals': hourly_cals, 'resp': resp_data, 'rhr': rhr_data, 'intraday_hr': intraday_hr, 'workouts': workouts_data}
     output = assemble(src, USER_PROFILE, os.path.join(PROJECT_DIR, sleep_score.LABELS_FILE))
 
     out_path = os.path.join(PROJECT_DIR, 'dashboard_data.json')

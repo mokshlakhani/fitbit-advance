@@ -10,7 +10,7 @@ const RANGES = [
   { key: 'day', label: 'Day' },
   { key: 'week', label: 'Week' },
   { key: 'month', label: 'Month' },
-  { key: '3m', label: '3 Months' },
+  { key: '3m', label: '3 Months', short: '3M' },
 ];
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -86,14 +86,26 @@ function tierOf(score) {
   return { cls: 'poor', word: 'Take it easy', strain: 'under 10', color: 'var(--poor)' };
 }
 
-// ---------- Icons (Lucide, see icons.js) ----------
+// ---------- Icons (Phosphor, see icons.js) ----------
 const ICON = {
   recovery: 'battery-charging', steps: 'footprints', energy: 'flame', strain: 'zap', zones: 'activity',
   sleep: 'moon', sleepScore: 'star', efficiency: 'gauge', rhr: 'heart', hrv: 'audio-waveform', hr: 'heart-pulse',
-  stress: 'brain', temp: 'thermometer', spo2: 'droplet', resp: 'wind', vo2: 'mountain',
+  stress: 'brain', temp: 'thermometer', spo2: 'droplet', resp: 'wind', vo2: 'mountain', bioAge: 'hourglass',
   chev: 'chevron-right', back: 'chevron-left',
 };
-const icon = (name, cls = '') => lucide(ICON[name] || name, cls);
+// Metric icons use Phosphor's two-tone weight; arrows and controls the regular one.
+const icon = (name, cls = '', weight) => ph(ICON[name] || name, cls, weight || (name === 'chev' || name === 'back' ? 'regular' : 'duotone'));
+
+// Metric icons with a small idle animation (heart beats, lungs breathe…). The
+// heart beats at the day's resting rate and the wind icon at the breathing rate.
+function glyph(key, d = day(), cls = 'glyph') {
+  const vars = [];
+  const rhr = d && d.cardiovascular.rhr;
+  const resp = d && d.cardiovascular.respiration_rate;
+  if (isNum(rhr)) vars.push(`--beat:${(60 / rhr).toFixed(2)}s`);
+  if (isNum(resp)) vars.push(`--breath:${(60 / resp).toFixed(2)}s`);
+  return `<span class="${cls} live" data-anim="${key}" style="--accent:${accent(key)};${vars.join(';')}">${icon(key)}</span>`;
+}
 
 // ---------- Metrics ----------
 const GROUPS = {
@@ -104,22 +116,26 @@ const GROUPS = {
   body: { label: 'Body', color: 'var(--body)' },
 };
 
-const avgHr = d => (d.strain.intraday_hr && d.strain.intraday_hr.length ? Math.round(mean(d.strain.intraday_hr.map(p => p.bpm))) : null);
-const zoneMin = d => (d.strain.zone_minutes ? d.strain.zone_minutes.fat_burn + d.strain.zone_minutes.cardio + d.strain.zone_minutes.peak : null);
+const avgHr = d => (d.strain.hr_stats ? d.strain.hr_stats.avg : d.strain.intraday_hr && d.strain.intraday_hr.length ? Math.round(mean(d.strain.intraday_hr.map(p => p.bpm))) : null);
+const zoneMin = d => (d.strain.zone_minutes ? d.strain.zone_minutes.moderate + d.strain.zone_minutes.vigorous + d.strain.zone_minutes.peak : null);
 // Temperatures are stored in °C; show them in the unit set in the user's Google Health settings.
 const useF = () => (state.data.profile.temperature_unit || '').toUpperCase() === 'FAHRENHEIT';
 const tempIn = c => (isNum(c) ? (useF() ? c * 9 / 5 + 32 : c) : null);
 
 // kind: chart style for periods; agg: how a period headline summarises days.
+const BIO_NOTE = 'Body age compares eight measures with a typical person of your age and sex: VO₂ max, resting heart rate, daily steps, zone minutes, strength training, sleep length, sleep regularity and BMI. Each one’s published link to long-term health (all-cause mortality) is turned into years, using the fact that age-related risk roughly doubles every 8 years. Related measures are discounted so they aren’t counted twice, and under 30 the effects measured in older adults count at 70%. It’s an estimate of physiological age, not a medical or genetic test. Sources: Nes 2014 (VO₂ max), Zhang 2016 (resting HR), Banach 2023 and Paluch 2022 (steps), Arem 2015 (activity), Momma 2022 (strength), Cappuccio 2010 (sleep length), Cribb 2023 (sleep regularity), Global BMI Mortality Collaboration 2016; peers from HUNT, NHANES and the All of Us Fitbit cohort.';
+
 const M = {
   recovery: { label: 'Recovery', group: 'recovery', unit: '%', dp: 0, kind: 'line', agg: 'avg', better: 'higher', domain: [0, 100], intraday: 'drivers', defaultRange: 'day',
-    pick: d => (d.cardiovascular.hrv_rmssd != null ? d.recovery.score : null) },
+    pick: d => d.recovery.score,
+    note: 'Each night, HRV, resting heart rate, breathing rate and skin temperature are compared with your own last 14 readings (from up to 28 days back) and combined with weights of 40%, 30%, 20% and 10%. Higher HRV and lower resting heart rate count in your favour; for breathing rate and skin temperature, steady is best and a rise counts against you more than a fall. 50 is a typical night for you. The drivers show how many points each vital moved your score from 50.' },
   steps: { label: 'Steps', group: 'activity', unit: '', dp: 0, kind: 'bar', agg: 'sum', goal: 10000, intraday: 'hourly_steps', defaultRange: 'day', pick: d => d.strain.steps },
   energy: { label: 'Energy burned', cardLabel: 'Energy', group: 'activity', unit: 'cal', dp: 0, kind: 'bar', agg: 'sum', intraday: 'hourly_calories', defaultRange: 'day', pick: d => d.strain.calories },
-  strain: { label: 'Day strain', cardLabel: 'Strain', group: 'activity', unit: '/21', dp: 1, kind: 'bar', agg: 'avg', domain: [0, 21], intraday: 'hr', defaultRange: 'week', pick: d => d.strain.score },
+  strain: { label: 'Day strain', cardLabel: 'Strain', group: 'activity', unit: '/21', dp: 1, kind: 'bar', agg: 'avg', domain: [0, 21], intraday: 'hr', defaultRange: 'week', pick: d => d.strain.score,
+    note: 'Cardiovascular load (Banister TRIMP) from minutes at or above light activity, 30% of your heart-rate reserve. Time spent asleep or sitting doesn’t add strain.' },
   zones: { label: 'Zone minutes', group: 'activity', unit: 'min', dp: 0, kind: 'bar', agg: 'sum', intraday: 'zones', defaultRange: 'week', pick: zoneMin },
   sleep: { label: 'Time asleep', group: 'sleep', unit: 'dur', dp: 0, kind: 'bar', agg: 'avg', goal: 480, better: 'higher', intraday: 'hypnogram', defaultRange: 'day', pick: d => d.sleep.duration_minutes },
-  sleepScore: { label: 'Sleep score', group: 'sleep', unit: '', dp: 0, kind: 'line', agg: 'avg', better: 'higher', intraday: 'scoreDrivers', defaultRange: 'day',
+  sleepScore: { label: 'Sleep score', cardLabel: 'Score', group: 'sleep', unit: '', dp: 0, kind: 'line', agg: 'avg', better: 'higher', intraday: 'scoreDrivers', defaultRange: 'day',
     pick: d => d.sleep.score,
     isEstimate: d => d.sleep.score_source === 'estimate',
     annotate: d => (d.sleep.score == null ? '' : d.sleep.score_source === 'app' ? ' · Fitbit app' : ' · estimated'),
@@ -134,14 +150,16 @@ const M = {
   rhr: { label: 'Resting heart rate', cardLabel: 'Resting HR', group: 'heart', unit: 'bpm', dp: 0, kind: 'line', agg: 'avg', better: 'lower', defaultRange: 'month', pick: d => d.cardiovascular.rhr },
   hrv: { label: 'Heart rate variability', short: 'HRV', cardLabel: 'HRV', group: 'heart', unit: 'ms', dp: 1, kind: 'line', agg: 'avg', better: 'higher', defaultRange: 'month', pick: d => d.cardiovascular.hrv_rmssd },
   hr: { label: 'Heart rate', group: 'heart', unit: 'bpm', dp: 0, kind: 'line', agg: 'avg', intraday: 'hr', defaultRange: 'day', pick: avgHr, cardLabel: 'Avg heart rate' },
-  stress: { label: 'Stress index', group: 'heart', unit: '', dp: 0, kind: 'line', agg: 'avg', better: 'lower', defaultRange: 'month', pick: d => d.cardiovascular.stress_index,
-    note: 'Derived from your nightly HRV and resting heart rate.' },
-  temp: { label: 'Skin temperature', group: 'body', unit: '°C', dp: 1, kind: 'line', agg: 'avg', defaultRange: 'month', pick: d => tempIn(d.cardiovascular.temp),
+  stress: { label: 'Nightly stress', cardLabel: 'Stress', group: 'heart', unit: '', dp: 0, kind: 'line', agg: 'avg', better: 'lower', domain: [0, 100], defaultRange: 'month', pick: d => d.cardiovascular.stress_index,
+    note: 'How far your resting heart rate was above, and your HRV below, your own last 14 nights. 50 is a typical night for you; higher means your body was under more strain. It needs 14 nights of both.' },
+  temp: { label: 'Skin temperature', cardLabel: 'Skin temp', group: 'body', unit: '°C', dp: 1, kind: 'line', agg: 'avg', defaultRange: 'month', pick: d => tempIn(d.cardiovascular.temp),
     note: 'Nightly skin temperature measured at the wrist.' },
   spo2: { label: 'Blood oxygen', group: 'body', unit: '%', dp: 1, kind: 'line', agg: 'avg', better: 'higher', defaultRange: 'month', pick: d => d.cardiovascular.spo2 },
   resp: { label: 'Breathing rate', group: 'body', unit: 'br/min', dp: 1, kind: 'line', agg: 'avg', defaultRange: 'month', pick: d => d.cardiovascular.respiration_rate },
+  bioAge: { label: 'Body age', group: 'body', unit: 'yrs', dp: 1, kind: 'line', agg: 'avg', better: 'lower', intraday: 'bioage', defaultRange: 'day',
+    pick: d => (d.bio_age && d.bio_age.status === 'ok' ? d.bio_age.value : null), note: BIO_NOTE },
   vo2: { label: 'VO₂ max', group: 'body', unit: 'ml/kg/min', dp: 1, kind: 'line', agg: 'avg', better: 'higher', defaultRange: '3m', pick: d => d.cardiovascular.vo2_max,
-    note: 'Your last measured cardio fitness score, carried forward until Fitbit measures it again.' },
+    note: 'Fitbit’s cardio fitness estimate, carried forward for up to 30 days after it was last measured. “For your age” compares it with people of your age and sex in the HUNT3 Fitness Study (Loe et al., 2013); fitness age is the age whose average VO₂ max matches yours, and the study’s age groups run from 20–29 to 70+.' },
 };
 
 
@@ -187,7 +205,8 @@ function normalRange(key, idx) {
   return { lo: m - half, hi: m + half, mean: m, min: Math.min(...vals), max: Math.max(...vals) };
 }
 
-function deltaInfo(key, idx) {
+// compact: "0.6 br/min vs usual" (the arrow shows the direction), for small cards.
+function deltaInfo(key, idx, compact = false) {
   const m = M[key];
   const v = m.pick(days()[idx]);
   const b = baselineOf(key, idx);
@@ -198,11 +217,11 @@ function deltaInfo(key, idx) {
   const dir = diff > 0 ? 1 : -1;
   const cls = m.better ? ((dir > 0) === (m.better === 'higher') ? 'good' : 'poor') : '';
   const u = key === 'recovery' ? ' pts' : m.unit === 'dur' || (m.unit || '').startsWith('/') ? '' : unitText(m.unit);
-  return { text: `${shown}${u} ${dir > 0 ? 'above' : 'below'} usual`, cls, dir };
+  return { text: `${shown}${u} ${compact ? 'vs' : dir > 0 ? 'above' : 'below'} usual`, cls, dir };
 }
 
-function deltaHtml(key, idx) {
-  const d = deltaInfo(key, idx);
+function deltaHtml(key, idx, compact = false) {
+  const d = deltaInfo(key, idx, compact);
   const arrow = d.dir ? `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="${d.dir > 0 ? 'M6 2l4 5H2z' : 'M6 10 2 5h8z'}"/></svg>` : '';
   return `<div class="delta ${d.cls}">${arrow}${esc(d.text)}</div>`;
 }
@@ -387,7 +406,7 @@ function hypnogram(w, stages) {
   const row = Object.fromEntries(STAGES.map((s, i) => [s.key, i]));
   const rows = STAGES.map((s, i) => `<text x="0" y="${top + i * rowH + rowH / 2 + 4}">${s.label}</text>
     <line class="grid-line" x1="${labelW}" x2="${w - 6}" y1="${top + i * rowH + rowH / 2}" y2="${top + i * rowH + rowH / 2}" style="stroke-dasharray:2 6"/>`).join('');
-  let links = '';
+  let links = '', hits = '';
   const blocks = segs.map((s, i) => {
     const r = row[s.key] ?? 2;
     const st = STAGES[r];
@@ -398,7 +417,12 @@ function hypnogram(w, stages) {
       if (pr !== r) links += `<line x1="${x1}" x2="${x1}" y1="${top + Math.min(pr, r) * rowH + rowH / 2}" y2="${top + Math.max(pr, r) * rowH + rowH / 2}" style="stroke:var(--line-strong)"/>`;
     }
     const tip = `<b>${st.label}</b><span>${hhmm(s.start)}–${hhmm(s.end)} · ${fmtDur((s.end - s.start) / 60000)}</span>`;
-    return `<rect class="stage-mark" x="${x1}" y="${top + r * rowH + 6}" width="${x2 - x1}" height="${rowH - 12}" rx="4" style="fill:${st.color};animation-delay:${Math.min(i * 10, 360)}ms" data-tip="${esc(tip)}"/>`;
+    const by = top + r * rowH + 6, bw = x2 - x1, bh = rowH - 12;
+    // A full-height column per stage, so a finger can slide through the night.
+    hits += `<rect class="hit" x="${x1}" y="0" width="${bw}" height="${top + rowH * STAGES.length}" data-tip="${esc(tip)}"/>`
+      + `<g class="hover-mark"><line x1="${(x1 + x2) / 2}" x2="${(x1 + x2) / 2}" y1="${top}" y2="${top + rowH * STAGES.length}" style="stroke:var(--line-strong)"/>`
+      + `<rect x="${x1 - 1.5}" y="${by - 1.5}" width="${bw + 3}" height="${bh + 3}" rx="5" style="fill:none;stroke:var(--text);stroke-width:1.5"/></g>`;
+    return `<rect class="stage-mark" x="${x1}" y="${by}" width="${bw}" height="${bh}" rx="4" style="fill:${st.color};animation-delay:${Math.min(i * 10, 360)}ms"/>`;
   }).join('');
   const ticks = [[t0, hhmm(segs[0].start)], [t1, hhmm(segs[segs.length - 1].end)]];
   const h0 = new Date(t0);
@@ -408,24 +432,27 @@ function hypnogram(w, stages) {
     if (new Date(t).getHours() % 2 === 0 && t - t0 > 2700000 && t1 - t > 2700000) ticks.push([t, hhmm(new Date(t))]);
   }
   const xl = ticks.map(([t, lab]) => `<text x="${Math.min(Math.max(x(t), labelW + 16), w - 22)}" y="${H - 8}" text-anchor="middle">${lab}</text>`).join('');
-  return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="Sleep stages ${hhmm(segs[0].start)} to ${hhmm(segs[segs.length - 1].end)}">${rows}${links}${blocks}${xl}</svg>`;
+  return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="Sleep stages ${hhmm(segs[0].start)} to ${hhmm(segs[segs.length - 1].end)}">${rows}${links}${blocks}${xl}${hits}</svg>`;
 }
 
 // Where today's value sits in your last 30 days.
 function rangeGauge(w, key, v, r) {
-  const H = 76;
+  const H = 62;
   const color = accent(key);
   const lo = Math.min(r.min, v), hi = Math.max(r.max, v);
   const pad = (hi - lo) * 0.08 || 1;
   const x = scale(lo - pad, hi + pad, 8, w - 8);
-  const yT = 30;
+  const yT = 22;
+  // One label under the band; units once, kept inside the chart on narrow screens.
+  const m = M[key];
+  const rangeText = m.unit === 'dur' ? `Usual ${fmtDur(r.lo)} – ${fmtDur(r.hi)}` : `Usual ${fmt(r.lo, m.dp)} – ${fmt(r.hi, m.dp)}${unitText(m.unit)}`;
+  const half = rangeText.length * 3.3;
+  const labelX = Math.min(w - 8 - half, Math.max(8 + half, (x(r.lo) + x(r.hi)) / 2));
   return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="${esc(valueText(key, v))}, usual range ${esc(valueText(key, r.lo))} to ${esc(valueText(key, r.hi))}">
     <rect x="8" y="${yT - 5}" width="${w - 16}" height="10" rx="5" style="fill:var(--raised)"/>
     <rect x="${x(r.lo)}" y="${yT - 5}" width="${Math.max(6, x(r.hi) - x(r.lo))}" height="10" rx="5" style="fill:${color};opacity:.35"/>
     <circle class="dot" cx="${x(v)}" cy="${yT}" r="9" style="fill:${color};stroke:var(--surface);stroke-width:3"/>
-    <text x="${x(r.lo)}" y="${yT + 30}" text-anchor="middle">${esc(valueText(key, r.lo))}</text>
-    <text x="${x(r.hi)}" y="${yT + 30}" text-anchor="middle">${esc(valueText(key, r.hi))}</text>
-    <text x="${(x(r.lo) + x(r.hi)) / 2}" y="${yT - 14}" text-anchor="middle">usual range</text>
+    <text x="${labelX}" y="${yT + 30}" text-anchor="middle">${esc(rangeText)}</text>
   </svg>`;
 }
 
@@ -446,19 +473,17 @@ function mountCharts(root, animate) {
 }
 
 // ---------- Number roll-up ----------
-const shown = {};
+// Every page change counts each headline number up from 0.
 function animateNumbers(root) {
   root.querySelectorAll('[data-num]').forEach(el => {
-    const key = el.dataset.key;
     const to = parseFloat(el.dataset.num);
     const dp = parseInt(el.dataset.dp, 10) || 0;
-    const from = shown[key] ?? to * 0.75;
-    shown[key] = to;
-    if (reducedMotion || from === to) { el.textContent = fmt(to, dp); return; }
+    if (reducedMotion || !to) { el.textContent = fmt(to, dp); return; }
+    el.textContent = fmt(0, dp);
     const t0 = performance.now();
     const tick = now => {
-      const p = Math.min(1, (now - t0) / 520);
-      el.textContent = fmt(from + (to - from) * (1 - (1 - p) ** 3), dp);
+      const p = Math.min(1, (now - t0) / 900);
+      el.textContent = fmt(to * (1 - (1 - p) ** 3), dp);
       if (p < 1) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -472,6 +497,9 @@ function hrefHome(iso) {
 function hrefMetric(key, range, iso) {
   return `#/m/${key}/${range}?d=${iso}`;
 }
+function hrefWorkout(iso, i) {
+  return `#/w/${iso}/${i}?d=${iso}`;
+}
 
 function parseRoute() {
   const raw = location.hash.replace(/^#\/?/, '');
@@ -481,6 +509,11 @@ function parseRoute() {
   if (d) {
     const i = dateIndex(d);
     state.idx = i >= 0 ? i : clampIdx(d < days()[0].date ? 0 : days().length - 1);
+  }
+  if (parts[0] === 'w' && dateIndex(parts[1]) >= 0) {
+    state.idx = dateIndex(parts[1]);
+    const w = (days()[state.idx].strain.workouts || [])[Number(parts[2])];
+    if (w) return { page: 'workout', key: 'strain', index: Number(parts[2]) };
   }
   if (parts[0] === 'm' && M[parts[1]]) {
     const range = RANGES.some(r => r.key === parts[2]) ? parts[2] : M[parts[1]].defaultRange;
@@ -496,17 +529,37 @@ function go(hash, { replace = false } = {}) {
 
 let lastPage = null;
 let lastHash = null;
+let transition = null;
+let firstRender = true;
+// Page changes animate with the View Transitions API where available: the
+// browser cross-slides GPU snapshots of the old and new page, so nothing has
+// to re-layout mid-animation. Home → metric slides forward, back slides back,
+// changing day or range just cross-fades.
 function route() {
   // hashchange and popstate can both fire for one navigation.
   if (location.hash === lastHash) return;
   lastHash = location.hash;
   const prevKey = lastPage;
   state.route = parseRoute();
-  const pageKey = state.route.page === 'home' ? 'home' : `m:${state.route.key}`;
+  const pageKey = state.route.page === 'home' ? 'home' : state.route.page === 'workout' ? `w:${location.hash}` : `m:${state.route.key}`;
   const changedPage = pageKey !== prevKey;
   lastPage = pageKey;
-  render({ pageEnter: changedPage });
-  if (changedPage) window.scrollTo({ top: 0, behavior: 'instant' });
+  const update = () => {
+    // Scroll first: render() checks what's on screen.
+    if (changedPage) window.scrollTo({ top: 0, behavior: 'instant' });
+    render({ pageEnter: changedPage && !document.startViewTransition });
+  };
+  if (firstRender || reducedMotion || !document.startViewTransition || document.visibilityState !== 'visible') {
+    firstRender = false;
+    update();
+    return;
+  }
+  const depth = k => (k === 'home' ? 0 : k && k.startsWith('w:') ? 2 : 1);
+  const dir = depth(pageKey) - depth(prevKey);
+  document.documentElement.dataset.nav = !changedPage ? 'swap' : dir > 0 ? 'forward' : dir < 0 ? 'back' : 'swap';
+  if (transition) transition.skipTransition();
+  transition = document.startViewTransition(update);
+  transition.finished.finally(() => { transition = null; });
 }
 
 // ---------- Story ----------
@@ -526,6 +579,12 @@ function buildStory(d, idx) {
     return {
       head: 'Waiting on last night’s data',
       body: `Recovery needs your overnight HRV, which hasn’t synced for this day yet. ${describeDelta('rhr', idx) || ''}`.trim(),
+    };
+  }
+  if (d.recovery.score == null) {
+    return {
+      head: 'Building your baseline',
+      body: `Recovery compares each night with your own last two weeks, so it starts once at least two of HRV, resting heart rate, breathing rate and skin temperature have 14 nights of data in the last 28 days. ${describeDelta('rhr', idx) || ''}`.trim(),
     };
   }
   const drivers = d.recovery.drivers.filter(x => DRIVER_KEY[x.metric]).sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
@@ -549,94 +608,84 @@ function weekWindow(idx) {
   return out;
 }
 
-// Seven days around the selected one, for the day strip.
-function stripWindow(idx) {
-  const n = days().length;
-  const start = Math.max(0, Math.min(idx - 3, n - 7));
-  const out = [];
-  for (let i = start; i < Math.min(n, start + 7); i++) out.push(i);
-  return out;
-}
-
+let lastStripIdx = null;
 function weekStrip() {
   const C = 2 * Math.PI * 10;
-  return `<nav class="week" aria-label="Days">${stripWindow(state.idx).map(i => {
+  const moved = lastStripIdx !== null && lastStripIdx !== state.idx;
+  lastStripIdx = state.idx;
+  // Every day, in a strip you can swipe all the way back through.
+  const all = days().map((_, i) => i);
+  return `<nav class="week" aria-label="Days">${all.map(i => {
     const d = days()[i];
     const rec = M.recovery.pick(d);
     const t = tierOf(rec);
     const arc = isNum(rec)
       ? `<circle class="arc" cx="13" cy="13" r="10" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - rec / 100)}" style="stroke:${t.color}"/>`
       : '';
-    return `<a class="wday" href="${hrefHome(d.date)}" data-replace ${i === state.idx ? 'aria-current="date"' : ''}
+    return `<a class="wday ${i === state.idx && moved ? 'bounce' : ''}" href="${hrefHome(d.date)}" data-replace ${i === state.idx ? 'aria-current="date"' : ''}
         aria-label="${esc(longDate(d.date))}${isNum(rec) ? `, recovery ${rec}%` : ''}">
-      <span class="label">${fmtDate(d.date, { weekday: 'short' })}</span>
+      <span class="label">${parseDate(d.date).getDate() === 1 ? fmtDate(d.date, { month: 'short' }) : fmtDate(d.date, { weekday: 'short' })}</span>
       <span class="wday-num">${parseDate(d.date).getDate()}</span>
       <svg class="wday-ring" viewBox="0 0 26 26" aria-hidden="true"><circle class="track" cx="13" cy="13" r="10"/>${arc}</svg>
     </a>`;
   }).join('')}</nav>`;
 }
 
-function dial(key, { name, color, frac, valueHtml: inner, sub, tag, label }) {
-  const R = 88;
-  const C = 2 * Math.PI * R;
-  const ticks = Array.from({ length: 60 }, (_, k) => {
-    const a = (k / 60) * 2 * Math.PI;
-    const long = k % 5 === 0;
-    const r1 = 101, r2 = long ? 107 : 104;
-    return `<line x1="${110 + r1 * Math.sin(a)}" y1="${110 - r1 * Math.cos(a)}" x2="${110 + r2 * Math.sin(a)}" y2="${110 - r2 * Math.cos(a)}"/>`;
-  }).join('');
-  const arc = isNum(frac)
-    ? `<circle class="dial-arc" cx="110" cy="110" r="${R}" stroke-width="13" style="stroke:${color}" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - Math.min(1, Math.max(0, frac)))}"/>`
-    : '';
-  return `<a class="dial reveal" style="--c:${color}" href="${hrefMetric(key, M[key].defaultRange, day().date)}" aria-label="${esc(label)}. Open details">
-    ${tag ? `<span class="tag">${tag}</span>` : ''}
-    <div class="dial-ring">
-      <svg viewBox="0 0 220 220" aria-hidden="true">
-        <g class="dial-ticks">${ticks}</g>
-        <circle class="dial-track" cx="110" cy="110" r="${R}" stroke-width="13"/>
-        ${arc}
-      </svg>
-      <div class="dial-center">
-        <div class="dial-value ${inner ? '' : 'none'}">${inner || '—'}</div>
-        <div class="dial-sub">${esc(sub)}</div>
-      </div>
-    </div>
-    <span class="label dial-name">${name}</span>
-  </a>`;
-}
-
 function strainWord(s) {
   return s >= 14 ? 'Hard' : s >= 10 ? 'Moderate' : s >= 5 ? 'Light' : 'Rest';
 }
 
+// Recovery, sleep and strain as three concentric rings (outer to inner), with
+// the numbers beside them. Each legend row opens its metric.
 function dials(d) {
   const rec = M.recovery.pick(d);
   const t = tierOf(rec);
   const sl = d.sleep;
   const score = sl.score;
   const st = d.strain.score;
-  const isLatest = state.idx === days().length - 1;
+  const isLatest = relativeDay(d.date) === 'Today';
   const num = (v, dp, k) => `<span data-num="${v}" data-dp="${dp}" data-key="${k}">${fmt(v, dp)}</span>`;
-  return `<section class="dials" aria-label="Today at a glance">
-    ${dial('sleepScore', {
-      name: 'Sleep', color: 'var(--sleep)', frac: isNum(score) ? score / 100 : null,
-      valueHtml: isNum(score) ? `${num(score, 0, 'dial-sleep')}<small>%</small>` : '',
+  const rings = [
+    {
+      key: 'recovery', name: 'Recovery', color: t ? t.color : 'var(--text-3)', frac: isNum(rec) ? rec / 100 : null,
+      value: isNum(rec) ? `${num(rec, 0, 'dial-rec')}<small>%</small>` : '',
+      sub: t ? t.word : d.cardiovascular.hrv_rmssd != null ? 'Calibrating' : 'Waiting',
+      label: `Recovery ${isNum(rec) ? rec + '%' : 'not available yet'}`,
+    },
+    {
+      key: 'sleepScore', name: 'Sleep', color: 'var(--sleep)', frac: isNum(score) ? score / 100 : null,
+      value: isNum(score) ? `${num(score, 0, 'dial-sleep')}<small>%</small>` : '',
       sub: isNum(sl.duration_minutes) ? fmtDur(sl.duration_minutes) : 'No sleep',
       tag: isNum(score) && sl.score_source === 'estimate' ? 'Est.' : '',
       label: `Sleep score ${isNum(score) ? score + '%' : 'not available'}`,
-    })}
-    ${dial('recovery', {
-      name: 'Recovery', color: t ? t.color : 'var(--text-3)', frac: isNum(rec) ? rec / 100 : null,
-      valueHtml: isNum(rec) ? `${num(rec, 0, 'dial-rec')}<small>%</small>` : '',
-      sub: t ? t.word : 'Waiting',
-      label: `Recovery ${isNum(rec) ? rec + '%' : 'not available yet'}`,
-    })}
-    ${dial('strain', {
-      name: 'Strain', color: 'var(--strain)', frac: isNum(st) ? st / 21 : null,
-      valueHtml: isNum(st) ? num(st, 1, 'dial-strain') : '',
+    },
+    {
+      key: 'strain', name: 'Strain', color: 'var(--strain)', frac: isNum(st) ? st / 21 : null,
+      value: isNum(st) ? `${num(st, 1, 'dial-strain')}<small>/21</small>` : '',
       sub: isNum(st) ? `${strainWord(st)}${isLatest ? ' so far' : ''}` : 'No heart rate',
       label: `Strain ${isNum(st) ? fmt(st, 1) + ' of 21' : 'not available'}`,
-    })}
+    },
+  ];
+  const SW = 15, GAP = 5;
+  const arcs = rings.map((r, i) => {
+    const R = 102 - SW / 2 - i * (SW + GAP);
+    const C = 2 * Math.PI * R;
+    const arc = isNum(r.frac)
+      ? `<circle class="dial-arc" cx="110" cy="110" r="${R}" stroke-width="${SW}" style="stroke:${r.color};--c:${r.color}" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - Math.min(1, Math.max(0, r.frac)))}"/>`
+      : '';
+    return `<circle class="dial-track" cx="110" cy="110" r="${R}" stroke-width="${SW}" style="stroke:color-mix(in srgb, ${r.color} 14%, transparent)"/>${arc}`;
+  }).join('');
+  const rows = rings.map(r => `<a class="ring-row" style="--c:${r.color}" href="${hrefMetric(r.key, M[r.key].defaultRange, d.date)}" aria-label="${esc(r.label)}. Open details">
+      <span class="ring-dot" aria-hidden="true"></span>
+      <span class="ring-text">
+        <span class="label ring-name">${r.name}${r.tag ? ` <span class="tag">${r.tag}</span>` : ''}</span>
+        <span class="ring-value ${r.value ? '' : 'none'}">${r.value || '—'}</span>
+        <span class="ring-sub">${esc(r.sub)}</span>
+      </span>
+    </a>`).join('');
+  return `<section class="rings reveal" aria-label="Today at a glance">
+    <div class="rings-art"><svg viewBox="0 0 220 220" aria-hidden="true">${arcs}</svg></div>
+    <div class="rings-legend">${rows}</div>
   </section>`;
 }
 
@@ -646,14 +695,14 @@ function insightCard(d) {
   const t = tierOf(rec);
   const rel = relativeDay(d.date);
   const chips = [
-    t ? `<span class="chip">${lucide('zap')}Aim for <b>${t.strain}</b> strain</span>` : '',
-    isNum(d.sleep.duration_minutes) ? `<a class="chip" href="${hrefMetric('sleep', 'day', d.date)}">${lucide('moon')}Slept <b>${fmtDur(d.sleep.duration_minutes)}</b></a>` : '',
-    isNum(d.strain.steps) ? `<a class="chip" href="${hrefMetric('steps', 'day', d.date)}">${lucide('footprints')}<b>${fmt(d.strain.steps)}</b> steps</a>` : '',
+    t ? `<span class="chip">${ph('zap', '', 'duotone')}Aim for <b>${t.strain}</b> strain</span>` : '',
+    isNum(d.sleep.duration_minutes) ? `<a class="chip" href="${hrefMetric('sleep', 'day', d.date)}">${ph('moon', '', 'duotone')}Slept <b>${fmtDur(d.sleep.duration_minutes)}</b></a>` : '',
+    isNum(d.strain.steps) ? `<a class="chip" href="${hrefMetric('steps', 'day', d.date)}">${ph('footprints', '', 'duotone')}<b>${fmt(d.strain.steps)}</b> steps</a>` : '',
   ].join('');
   return `<section class="insight reveal" aria-label="Insight">
-    <span class="insight-icon">${lucide('sparkles')}</span>
-    <div>
-      <span class="label">${esc(rel ? `${rel} · ${fullDate(d.date)}` : fullDate(d.date))}</span>
+    <span class="insight-icon live" data-anim="sparkles">${ph('sparkles', '', 'duotone')}</span>
+    <div class="insight-body">
+      <span class="label insight-date">${esc(rel ? `${rel} · ${fullDate(d.date)}` : fullDate(d.date))}</span>
       <h1>${esc(story.head)}</h1>
       <p>${esc(story.body)}</p>
       <div class="chips">${chips}</div>
@@ -805,6 +854,14 @@ function trendsPanel() {
   </section>`;
 }
 
+// "3.0 younger than your age" for the body age card.
+function bioAgeDelta(b) {
+  if (!b || b.status !== 'ok') return `<div class="delta">${b && b.status === 'calibrating' ? 'Calibrating' : ''}</div>`;
+  const dir = b.delta < 0 ? 'younger' : b.delta > 0 ? 'older' : '';
+  const cls = b.delta < 0 ? 'good' : b.delta > 0 ? 'poor' : '';
+  return `<div class="delta ${cls}">${dir ? `${fmt(Math.abs(b.delta), 1)} ${dir} than your age` : 'Same as your age'}</div>`;
+}
+
 function metricCard(key, { wide = false } = {}) {
   const m = M[key];
   const d = day();
@@ -824,36 +881,250 @@ function metricCard(key, { wide = false } = {}) {
       <div class="legend">${STAGES.map(s => `<span><i style="background:${s.color}"></i>${s.label}<b>${fmtDur(mins[s.key])}</b></span>`).join('')}</div>`;
   }
   return `<a class="card reveal ${wide ? 'wide' : ''}" href="${hrefMetric(key, m.defaultRange, iso)}" style="--accent:${accent(key)}" aria-label="${esc(m.label)}: ${esc(valueText(key, v))}${estimated ? ', estimated' : ''}. Open details">
-    <div class="card-top"><span class="glyph">${icon(key)}</span><span class="card-label">${esc(m.cardLabel || m.label)}</span>${estimated ? '<span class="tag" title="Estimated: Google’s API doesn’t provide Fitbit’s sleep score">Est.</span>' : ''}${icon('chev', 'chev')}</div>
+    <div class="card-top">${glyph(key, d)}<span class="card-label">${esc(m.cardLabel || m.label)}</span>${estimated ? '<span class="tag" title="Estimated: Google’s API doesn’t provide Fitbit’s sleep score">Est.</span>' : ''}${icon('chev', 'chev')}</div>
     ${value}
-    ${deltaHtml(key, state.idx)}
+    ${key === 'bioAge' ? bioAgeDelta(d.bio_age) : deltaHtml(key, state.idx, window.matchMedia('(max-width: 720px)').matches)}
     ${extra || `<div class="spark">${slot('spark-' + key, w => sparkChart(w, key, vals, vals.length - 1))}</div>`}
   </a>`;
 }
 
 function workoutIcon(name) {
   if (/(cycl|bike|spin)/i.test(name)) return 'bike';
-  if (/(run|walk|hike|treadmill)/i.test(name)) return 'footprints';
-  if (/(football|soccer|sport|tennis|basket|cricket|badminton|volley)/i.test(name)) return 'volleyball';
+  if (/(run|treadmill|jog)/i.test(name)) return 'run';
+  if (/(walk|hike)/i.test(name)) return 'footprints';
+  if (/(swim)/i.test(name)) return 'swim';
+  if (/(table tennis|ping|badminton|tennis|squash)/i.test(name)) return 'ping-pong';
+  if (/(football|soccer|sport|basket|cricket|volley|rugby)/i.test(name)) return 'volleyball';
+  if (/(danc|aerobic|yoga|pilates)/i.test(name)) return 'person-standing';
   return 'dumbbell';
+}
+
+const endTime = w => {
+  const [h, m] = (w.time || '0:0').split(':').map(Number);
+  const t = h * 60 + m + (w.duration_minutes || 0);
+  return `${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};
+
+// One tappable row per workout: icon, name, when, and its own strain.
+function workoutRow(iso, i, w, { showDate = false } = {}) {
+  const meta = [showDate ? shortDate(iso) : null, showDate ? w.time : `${w.time}–${endTime(w)}`, `${w.duration_minutes} min`].filter(Boolean).join(' · ');
+  return `<a class="workout" href="${hrefWorkout(iso, i)}">
+      <span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'duotone')}</span>
+      <div class="workout-main"><div class="workout-name">${esc(w.name)}</div><div class="workout-meta">${esc(meta)}</div></div>
+      <div class="workout-strain">${isNum(w.strain) ? `<b>${fmt(w.strain, 1)}</b><span class="label">strain</span>` : `<b>${w.duration_minutes}</b><span class="label">min</span>`}</div>
+      ${icon('chev', 'workout-chev')}
+    </a>`;
 }
 
 function workoutsCard() {
   const ws = day().strain.workouts || [];
-  const body = ws.length ? `<div class="workouts">${ws.map(w => `<div class="workout">
-      <span class="glyph" style="--accent:var(--strain)">${lucide(workoutIcon(w.name))}</span>
-      <div><div class="workout-name">${esc(w.name)}</div>
-      <div class="workout-meta">${esc([w.time, w.calories ? `${w.calories} cal` : null, w.avg_hr ? `${w.avg_hr} bpm avg` : null].filter(Boolean).join(' · '))}</div></div>
-      <div class="workout-strain"><b>${w.duration_minutes}</b><span class="label">min</span></div>
-    </div>`).join('')}</div>` : '<p class="empty">No workouts logged.</p>';
+  const body = ws.length ? `<div class="workouts">${ws.map((w, i) => workoutRow(day().date, i, w)).join('')}</div>` : '<p class="empty">No workouts logged.</p>';
   return `<div class="card full reveal" style="--accent:var(--strain)">
-    <div class="card-top"><span class="glyph">${lucide('dumbbell')}</span><span class="card-label">Workouts</span></div>
+    <div class="card-top"><span class="glyph">${ph('dumbbell', '', 'duotone')}</span><span class="card-label">Workouts</span></div>
     ${body}
   </div>`;
 }
 
+// Workouts on the Strain pages: the selected day's, then the recent ones.
+function workoutsPanel(iso, range) {
+  const idx = dateIndex(iso);
+  const today = (days()[idx].strain.workouts || []).map((w, i) => workoutRow(iso, i, w));
+  const recent = [];
+  for (let i = idx - 1; i >= 0 && recent.length < 8 && i >= idx - 30; i--) {
+    const d = days()[i];
+    (d.strain.workouts || []).forEach((w, k) => { if (recent.length < 8) recent.push(workoutRow(d.date, k, w, { showDate: true })); });
+  }
+  const label = relativeDay(iso) || longDate(iso);
+  return `<section class="panel" style="--accent:var(--strain)">
+    <div class="panel-title"><span class="label">Workouts · ${esc(label)}</span></div>
+    ${today.length ? `<div class="workouts">${today.join('')}</div>` : '<p class="empty">No workouts on this day.</p>'}
+    ${recent.length ? `<div class="panel-title"><span class="label">Recent workouts</span></div><div class="workouts">${recent.join('')}</div>` : ''}
+  </section>`;
+}
+
+// Zone time: "8 min 42 s" from minutes with one decimal.
+const fmtZone = min => {
+  const sec = Math.round(min * 60);
+  if (sec < 60) return `${sec} s`;
+  if (sec >= 3600) return `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
+  return sec % 60 ? `${Math.floor(sec / 60)} min ${sec % 60} s` : `${sec / 60} min`;
+};
+
+// Fitbit's zones (Active Zone Minutes): share of heart-rate reserve.
+const ZONE_ROWS = [
+  ['light', 'Light', 'var(--z-light)', 0, 0.4],
+  ['moderate', 'Moderate', 'var(--z-moderate)', 0.4, 0.6],
+  ['vigorous', 'Vigorous', 'var(--z-vigorous)', 0.6, 0.85],
+  ['peak', 'Peak', 'var(--z-peak)', 0.85, 1],
+];
+const zoneOf = (bpm, rhr, maxHr) => {
+  const hrr = (bpm - rhr) / (maxHr - rhr);
+  return [...ZONE_ROWS].reverse().find(([, , , lo]) => hrr >= lo) || ZONE_ROWS[0];
+};
+
+// "Light · 42% · 28 m" with a full-width bar, as in the Fitbit app.
+function zoneBars(z, rhr, maxHr) {
+  const total = ZONE_ROWS.reduce((a, [k]) => a + (z[k] || 0), 0) || 1;
+  return `<div class="zones">${ZONE_ROWS.map(([k, lab, c, f0, f1]) => {
+    const v = z[k] || 0;
+    const pct = Math.round(v / total * 100);
+    const range = isNum(rhr) ? (k === 'peak' ? `${Math.round(rhr + f0 * (maxHr - rhr))}+ bpm` : `${k === 'light' ? 'under ' : `${Math.round(rhr + f0 * (maxHr - rhr))}–`}${Math.round(rhr + f1 * (maxHr - rhr))} bpm`) : '';
+    return `<div class="zone">
+      <div class="zone-head"><b>${lab}</b><span>· ${pct}% · ${fmtZone(v)}</span><em>${range}</em></div>
+      <div class="zone-track"><i style="width:${v / total * 100}%;background:${c}"></i></div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// Heart rate through a workout, the line coloured by the zone it is in, with
+// dotted lines where each zone starts (after the Fitbit app's workout chart).
+function workoutChart(w, rhr, maxHr) {
+  return width => {
+    const H = 240, top = 14, bottom = 30, padL = 4, padR = 40;
+    const plotB = H - bottom;
+    const pts = w.hr_t.map((t, i) => ({ s: t, bpm: w.hr_bpm[i] }));
+    const dur = Math.max(1, w.duration_minutes);
+    const x = scale(0, dur * 60, padL, width - padR);
+    const bpm = pts.map(p => p.bpm);
+    const haveZones = isNum(rhr) && maxHr > rhr;
+    const zoneBpm = f => rhr + f * (maxHr - rhr);
+    const lo = Math.min(...bpm) - 12;
+    const hi = Math.max(Math.max(...bpm), haveZones ? zoneBpm(0.85) : 0) + 8;
+    const t = niceTicks(lo, hi, 4);
+    const y = scale(t.lo, t.hi, plotB, top);
+    const grid = t.ticks.map(v => `<text x="${width - padR + 8}" y="${y(v) + 4}">${v}</text>`).join('');
+    const thresholds = haveZones ? ZONE_ROWS.slice(1).map(([, , c, f0]) => {
+      const yy = y(zoneBpm(f0));
+      return yy >= top && yy <= plotB ? `<line x1="${padL}" x2="${width - padR}" y1="${yy}" y2="${yy}" style="stroke:${c};stroke-width:2;stroke-dasharray:0.1 7;stroke-linecap:round;opacity:.85"/>` : '';
+    }).join('') : '';
+    // One path per run of readings in the same zone; each run starts at the
+    // previous reading so the line stays continuous.
+    const segs = [];
+    let cur = null;
+    pts.forEach((p, i) => {
+      const color = haveZones ? zoneOf(p.bpm, rhr, maxHr)[2] : 'var(--heart)';
+      if (!cur || cur.color !== color) {
+        cur = { color, d: i ? [`${x(pts[i - 1].s).toFixed(1)},${y(pts[i - 1].bpm).toFixed(1)}`] : [] };
+        segs.push(cur);
+      }
+      cur.d.push(`${x(p.s).toFixed(1)},${y(p.bpm).toFixed(1)}`);
+    });
+    const sw = pts.length > 400 ? 1.6 : 2.2;
+    const lines = segs.filter(g => g.d.length > 1).map(g => `<path d="M${g.d.join('L')}" style="fill:none;stroke:${g.color};stroke-width:${sw};stroke-linejoin:round;stroke-linecap:round"/>`).join('');
+    const peakPt = pts[bpm.indexOf(Math.max(...bpm))];
+    const peak = `<circle class="dot" cx="${x(peakPt.s)}" cy="${y(peakPt.bpm)}" r="5" style="fill:var(--text);stroke:var(--card);stroke-width:2"/>`;
+    const clock = sec => {
+      const [h, m] = w.time.split(':').map(Number);
+      const tot = h * 60 + m + Math.round(sec / 60);
+      return `${String(Math.floor(tot / 60) % 24).padStart(2, '0')}:${String(tot % 60).padStart(2, '0')}`;
+    };
+    const xt = [[0, 'start'], [dur * 30, 'middle'], [dur * 60, 'end']]
+      .map(([sec, anchor]) => `<line x1="${x(sec)}" x2="${x(sec)}" y1="${plotB + 2}" y2="${plotB + 7}" style="stroke:var(--text-3)"/><text x="${x(sec)}" y="${H - 6}" text-anchor="${anchor}">${clock(sec)}</text>`).join('');
+    const stepN = Math.max(1, Math.ceil(pts.length / 240));
+    const hitPts = pts.filter((_, i) => i % stepN === 0);
+    const xs = hitPts.map(p => x(p.s));
+    const tips = hitPts.map(p => `<b>${p.bpm} bpm</b><span>${clock(p.s)}${haveZones ? ` · ${zoneOf(p.bpm, rhr, maxHr)[1]}` : ''}</span>`);
+    const hovers = hitPts.map((p, i) => `<g class="hover-mark"><line x1="${xs[i]}" x2="${xs[i]}" y1="${top}" y2="${plotB}" style="stroke:var(--line-strong)"/><circle cx="${xs[i]}" cy="${y(p.bpm)}" r="4.5" style="fill:${haveZones ? zoneOf(p.bpm, rhr, maxHr)[2] : 'var(--heart)'};stroke:var(--card);stroke-width:2"/></g>`);
+    return `<svg class="chart wchart" width="${width}" height="${H}" viewBox="0 0 ${width} ${H}" role="img" aria-label="Heart rate during ${esc(w.name)}, coloured by zone">
+      ${thresholds}${grid}<g class="wline">${lines}</g>${peak}${xt}${hitStrips(xs, top, plotB - top, tips, null, hovers)}
+    </svg>`;
+  };
+}
+
+// One sentence about the session, like the Fitbit app's summary.
+function workoutSummary(w) {
+  const z = w.fitbit_zones || w.zone_minutes;
+  if (!z) return '';
+  const total = ZONE_ROWS.reduce((a, [k]) => a + (z[k] || 0), 0);
+  if (!total) return '';
+  const [k, lab] = ZONE_ROWS.reduce((best, row) => ((z[row[0]] || 0) > (z[best[0]] || 0) ? row : best));
+  const share = z[k] / total;
+  const portion = share > 0.9 ? 'Nearly all of' : share > 0.6 ? 'Most of' : share > 0.5 ? 'Over half of' : 'The largest share of';
+  const hard = (z.vigorous || 0) + (z.peak || 0);
+  const tail = hard >= 1 ? `, with ${fmtZone(hard)} vigorous or harder` : ', with no time in the vigorous or peak zones';
+  return `${portion} your ${w.duration_minutes}-minute session was in the ${lab.toLowerCase()} zone${tail}${isNum(w.strain) ? `, for ${fmt(w.strain, 1)} strain` : ''}.`;
+}
+
+function renderWorkout() {
+  const d = day();
+  const iso = d.date;
+  const w = d.strain.workouts[state.route.index];
+  const rhr = d.cardiovascular.rhr;
+  const maxHr = state.data.profile.zone_max_hr || state.data.profile.max_hr;
+  document.documentElement.style.setProperty('--mood', 'var(--strain)');
+
+  const big = [
+    { label: 'Strain', value: isNum(w.strain) ? fmt(w.strain, 1) : '--', sub: 'this workout', accent: true },
+    { label: 'Duration', value: `${w.duration_minutes} min`, sub: `${w.time}–${endTime(w)}` },
+    { label: 'Calories', value: w.calories ? `${fmt(w.calories)} cal` : '--' },
+    { label: 'Average HR', value: isNum(w.avg_hr_measured) ? `${w.avg_hr_measured} bpm` : w.avg_hr ? `${w.avg_hr} bpm` : '--' },
+    { label: 'Peak HR', value: isNum(w.peak_hr) ? `${w.peak_hr} bpm` : '--', sub: isNum(w.peak_hr) ? `${Math.round(w.peak_hr / maxHr * 100)}% of max` : '' },
+  ];
+  const head = `<div class="w-stats">${big.map(b => `<div class="w-stat ${b.accent ? 'accent' : ''}"><div class="stat-label">${esc(b.label)}</div><div class="w-stat-value">${statValue(b.value)}</div>${b.sub ? `<div class="stat-sub">${esc(b.sub)}</div>` : ''}</div>`).join('')}</div>`;
+
+  const perSecond = w.hr_resolution === 'second';
+  const chart = w.hr_t && w.hr_t.length > 1
+    ? slot('workout', workoutChart(w, rhr, maxHr)) + `<div class="legend zone-legend">${ZONE_ROWS.map(([, lab, c]) => `<span><i style="background:${c};border-radius:50%"></i>${lab}</span>`).join('')}</div><p class="note">${perSecond ? `Every heart-rate reading (${fmt(w.hr_t.length)}, about one every ${Math.max(1, Math.round(w.duration_minutes * 60 / w.hr_t.length))} s)` : 'Heart rate each minute (no raw readings for this day)'}. The line's colour shows your zone; dotted lines mark where moderate (40%), vigorous (60%) and peak (85%) start, as shares of the range between your resting ${isNum(rhr) ? rhr : '--'} and maximum ${maxHr} bpm. The white dot is your peak.</p>`
+    : '<p class="empty">No heart rate was recorded during this workout.</p>';
+
+  // Fitbit's own zone times when the API has them (they match the Fitbit app exactly).
+  const z = w.fitbit_zones || w.zone_minutes;
+  const zones = z ? `<section class="panel"><div class="panel-title"><span class="label">Time in each zone</span></div>${zoneBars(z, rhr, maxHr)}<p class="note">${w.fitbit_zones ? 'Zone times from Fitbit, as in the Fitbit app.' : 'Zone times worked out from your heart-rate readings.'}</p></section>` : '';
+
+  const extras = [];
+  const drop = v => `${v > 0 ? '−' : v < 0 ? '+' : ''}${Math.abs(v)} bpm`;
+  if (isNum(w.hr_recovery_60)) extras.push({ label: 'Recovery · 1 min', value: drop(w.hr_recovery_60), sub: 'drop after you stopped' });
+  if (isNum(w.hr_recovery)) extras.push({ label: 'Recovery · 2 min', value: drop(w.hr_recovery), sub: 'drop after you stopped' });
+  if (w.distance_km) extras.push({ label: 'Distance', value: `${fmt(w.distance_km, 2)} km` });
+  if (w.distance_km && w.duration_minutes) {
+    const pace = w.duration_minutes / w.distance_km;
+    extras.push({ label: 'Pace', value: `${Math.floor(pace)}:${String(Math.round((pace % 1) * 60)).padStart(2, '0')} /km` });
+  }
+  if (w.steps) extras.push({ label: 'Steps', value: fmt(w.steps) });
+  if (w.elevation_m) extras.push({ label: 'Elevation gain', value: `${fmt(w.elevation_m)} m` });
+  if (isNum(w.active_zone_minutes)) extras.push({ label: 'Active Zone Minutes', value: String(w.active_zone_minutes), sub: 'from Fitbit' });
+
+  // Same kind of workout before this one.
+  const past = [];
+  for (let i = state.idx; i >= 0 && past.length < 6; i--) {
+    const dd = days()[i];
+    (dd.strain.workouts || []).forEach((x, k) => {
+      if (x.name === w.name && !(i === state.idx && k === state.route.index) && (i < state.idx || k < state.route.index) && past.length < 6) past.push([dd.date, k, x]);
+    });
+  }
+  let compare = '';
+  if (past.length) {
+    const avg = f => { const v = past.map(([, , x]) => f(x)).filter(isNum); return v.length ? mean(v) : null; };
+    const cmp = (label, mine, theirs, unit, dp = 0) => (isNum(mine) && isNum(theirs)
+      ? `<div class="cmp"><span>${label}</span><b>${fmt(mine, dp)}${unit}</b><em class="${mine >= theirs ? 'up' : 'down'}">${mine >= theirs ? '+' : '−'}${fmt(Math.abs(mine - theirs), dp)} vs usual</em></div>` : '');
+    compare = `<section class="panel"><div class="panel-title"><span class="label">Compared with your last ${past.length} ${esc(w.name.toLowerCase())} session${past.length > 1 ? 's' : ''}</span></div>
+      <div class="cmps">
+        ${cmp('Strain', w.strain, avg(x => x.strain), '', 1)}
+        ${cmp('Duration', w.duration_minutes, avg(x => x.duration_minutes), ' min')}
+        ${cmp('Average HR', w.avg_hr_measured, avg(x => x.avg_hr_measured), ' bpm')}
+        ${cmp('Peak HR', w.peak_hr, avg(x => x.peak_hr), ' bpm')}
+      </div>
+      <div class="workouts">${past.map(([dt, k, x]) => workoutRow(dt, k, x, { showDate: true })).join('')}</div>
+    </section>`;
+  }
+
+  return `
+    <div class="detail-head">
+      <a class="back" href="${hrefMetric('strain', 'day', iso)}" aria-label="Back to strain">${icon('back')}<span>Strain</span></a>
+      <h1 class="detail-title"><span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'duotone')}</span><span>${esc(w.name)}</span></h1>
+    </div>
+    <p class="w-when">${esc(fullDate(iso))} · ${esc(w.time)}–${esc(endTime(w))}</p>
+    ${workoutSummary(w) ? `<p class="w-summary">${esc(workoutSummary(w))}</p>` : ''}
+    ${head}
+    <section class="panel" style="--accent:var(--heart)"><div class="panel-title"><span class="label">Heart rate</span></div>${chart}</section>
+    ${zones}
+    ${extras.length ? statCards(extras) : ''}
+    ${compare}
+  `;
+}
+
 const HOME_SECTIONS = [
-  { title: 'Key metrics', keys: ['hrv', 'rhr', 'resp', 'spo2', 'temp', 'vo2', 'stress', 'hr'] },
+  { title: 'Key metrics', keys: ['bioAge', 'vo2', 'hrv', 'rhr', 'resp', 'spo2', 'temp', 'stress', 'hr'] },
   { title: 'Sleep', keys: ['sleep', 'sleepScore', 'efficiency'] },
   { title: 'Activity', keys: ['steps', 'energy', 'strain', 'zones'], workouts: true },
 ];
@@ -954,7 +1225,7 @@ function renderDetail() {
 
   const seg = `<nav class="segmented" aria-label="Time range" style="--n:${RANGES.length}">
     <span class="thumb" style="width:calc((100% - 6px) / ${RANGES.length});transform:translateX(${RANGES.findIndex(r => r.key === range) * 100}%)"></span>
-    ${RANGES.map(r => `<a href="${hrefMetric(key, r.key, iso)}" data-replace aria-current="${r.key === range}">${r.label}</a>`).join('')}
+    ${RANGES.map(r => `<a href="${hrefMetric(key, r.key, iso)}" data-replace aria-current="${r.key === range}" aria-label="${r.label}">${r.short ? `<span class="long">${r.label}</span><span class="short">${r.short}</span>` : r.label}</a>`).join('')}
   </nav>`;
   const periodNav = `<div class="period">
     <a class="icon-btn" ${prevHref ? `href="${prevHref}"` : 'aria-disabled="true"'} data-replace aria-label="Previous ${range === '3m' ? 'three months' : range}">${icon('back')}</a>
@@ -964,15 +1235,18 @@ function renderDetail() {
 
   const body = range === 'day' ? detailDay(key, color) : detailPeriod(key, range, p, color);
 
+  const workoutsHtml = key === 'strain' ? workoutsPanel(iso, range) : '';
   return `
     <div class="detail-head">
-      <a class="back" href="${hrefHome(iso)}">${icon('back')}Today</a>
+      <a class="back" href="${hrefHome(iso)}" aria-label="Back to ${esc(relativeDay(iso) || longDate(iso))}">${icon('back')}<span>${esc(relativeDay(iso) || 'Home')}</span></a>
+      <h1 class="detail-title">${glyph(key)}<span>${esc(m.label)}</span></h1>
     </div>
-    <h1 class="detail-title"><span class="glyph" style="--accent:${color}">${icon(key)}</span>${esc(m.label)}</h1>
+
     <section class="panel" style="--accent:${color}">
       <div class="controls">${seg}${periodNav}</div>
       ${body.panel}
     </section>
+    ${workoutsHtml}
     ${body.after || ''}
     ${m.note ? `<p class="note">${esc(typeof m.note === 'function' ? m.note() : m.note)}</p>` : ''}
   `;
@@ -986,13 +1260,61 @@ function headline(label, valueInner, note, noteCls = '', emptyText = 'No data') 
   </div>`;
 }
 
+// "61.0 ml/kg/min" → number with a smaller unit, so long units don't wrap on phones.
+function statValue(v) {
+  const m = /^([−\-]?[\d.,]+)\s+([^\d\s].*)$/.exec(String(v));
+  return m ? `${esc(m[1])}<span class="u">${esc(m[2])}</span>` : esc(v);
+}
+
 function statCards(items) {
-  return `<div class="stats">${items.map(s => `<div class="stat"><div class="stat-label">${esc(s.label)}</div><div class="stat-value">${esc(s.value)}</div>${s.sub ? `<div class="stat-sub">${esc(s.sub)}</div>` : ''}</div>`).join('')}</div>`;
+  return `<div class="stats">${items.map(s => `<div class="stat"><div class="stat-label">${esc(s.label)}</div><div class="stat-value">${statValue(s.value)}</div>${s.sub ? `<div class="stat-sub">${esc(s.sub)}</div>` : ''}</div>`).join('')}</div>`;
 }
 
 function hourLabels() {
   return Array.from({ length: 24 }, (_, h) => ({ 0: '12a', 6: '6a', 12: '12p', 18: '6p' }[h] || ''));
 }
+const BIO_UNITS = {
+  vo2: v => `${fmt(v, 1)} ml/kg/min`, rhr: v => `${fmt(v, 0)} bpm`, steps: v => `${fmt(v, 0)} steps/day`,
+  zone: v => `${fmt(v, 0)} min/week`, strength: v => `${fmt(v, 0)} min/week`, sleep: v => fmtDur(v * 60),
+  sri: v => fmt(v, 0), bmi: v => fmt(v, 1),
+};
+const BIO_PEER_TEXT = { sleep: '7–8 h', bmi: '20–25', strength: 'none' };
+
+function bioAgeDetail(d, idx) {
+  const b = d.bio_age;
+  if (!b) return '<p class="empty">Body age needs your age in your Google Health profile.</p>';
+  if (b.status !== 'ok') {
+    return `<p class="empty">Calibrating: body age needs at least three measures with enough data (14 days each), including VO₂ max or resting heart rate.${b.missing.length ? ` Still waiting on: ${esc(b.missing.join(', '))}.` : ''}</p>`;
+  }
+  const maxY = Math.max(0.5, ...b.drivers.map(x => Math.abs(x.years)));
+  const rows = b.drivers.map(x => {
+    const cls = x.years < -0.05 ? 'good' : x.years > 0.05 ? 'poor' : '';
+    const w = Math.abs(x.years) / maxY * 50;
+    const peer = BIO_PEER_TEXT[x.key] || BIO_UNITS[x.key](x.peer);
+    return `<div class="row">
+      <div class="row-main"><div class="row-title">${esc(x.label)}</div><div class="row-sub">You ${esc(BIO_UNITS[x.key](x.value))} · peers ${esc(peer)}</div></div>
+      <div class="bio-bar" aria-hidden="true"><i style="${x.years < 0 ? `right:50%` : `left:50%`};width:${w}%;background:var(--${cls || 'text-3'})"></i><b></b></div>
+      <div class="row-val ${cls}">${x.years > 0 ? '+' : x.years < 0 ? '−' : ''}${fmt(Math.abs(x.years), 1)} y</div></div>`;
+  }).join('');
+  const levers = b.levers.length ? `<div class="headline-label">What would move it</div><div class="rows">${b.levers.map(l => `<div class="row">
+      <div class="row-main"><div class="row-title">${esc(l.label)}</div><div class="row-sub">${esc(BIO_UNITS[l.key](l.from))} → ${esc(BIO_UNITS[l.key](l.to))}</div></div>
+      <div class="row-val good">−${fmt(Math.abs(l.years), 1)} y</div></div>`).join('')}</div>` : '';
+  // Trend: body age over the last 90 days.
+  const lo = Math.max(0, idx - 89);
+  const win = [];
+  for (let i = lo; i <= idx; i++) win.push(i);
+  const vals = win.map(i => M.bioAge.pick(days()[i]));
+  const trend = vals.filter(isNum).length > 1
+    ? `<div class="headline-label">Last ${win.length} days</div>` + slot('bioTrend', w => lineChart(w, {
+      key: 'bioAge', vals, labels: win.map(i => { const dt = parseDate(days()[i].date); return dt.getDate() === 1 ? fmtDate(days()[i].date, { month: 'short' }) : ''; }),
+      color: 'var(--body)', tips: win.map((i, k) => `<b>${isNum(vals[k]) ? fmt(vals[k], 1) : '--'}</b><span>${longDate(days()[i].date)}</span>`),
+      hrefs: win.map(i => hrefMetric('bioAge', 'day', days()[i].date)), selPos: vals.length - 1, H: 170, dots: false, baseline: b.chronological }))
+    : '';
+  return `<div class="headline-label">What’s moving it (years vs a typical ${b.chronological}-year-old)</div><div class="rows">${rows}</div>
+    <p class="note">Positive years add to your body age, negative years take away. Activity measures count at half weight together and sleep measures at 80%, so overlapping habits aren’t counted twice.</p>
+    ${levers}${trend}`;
+}
+
 const hourName = h => `${(h % 12) || 12}${h < 12 ? ' AM' : ' PM'}`;
 
 function detailDay(key, color) {
@@ -1018,26 +1340,30 @@ function detailDay(key, color) {
         { label: m.goal ? 'Goal' : '30-day high', value: m.goal ? valueText(key, m.goal) : valueText(key, r && r.max), sub: m.goal && isNum(v) ? `${Math.min(100, Math.round(v / m.goal * 100))}% reached` : '' },
       ]);
     }
-  } else if (m.intraday === 'hr' || m.intraday === 'zones') {
+  } else if (key !== 'hr' && (m.intraday === 'hr' || m.intraday === 'zones')) {
+    // Strain and zone minutes: time in each heart-rate zone, no heart-rate line
+    // (that lives on the Heart page).
+    const z = d.strain.zone_minutes;
+    if (z) chart = `<div class="panel-title"><span class="label">Time in each zone</span></div>${zoneBars(z, d.cardiovascular.rhr, state.data.profile.zone_max_hr || state.data.profile.max_hr)}`;
+  } else if (m.intraday === 'hr') {
     const hr = d.strain.intraday_hr || [];
     if (hr.length) {
       const bpm = hr.map(p => p.bpm);
       const labels = hr.map(p => ({ '00:00': '12a', '06:00': '6a', '12:00': '12p', '18:00': '6p' }[p.time] || ''));
       const tips = hr.map(p => `<b>${p.bpm} bpm</b><span>${p.time}</span>`);
-      chart = slot('day', w => lineChart(w, { key: 'hr', vals: bpm, labels, color: key === 'hr' ? color : 'var(--heart)', tips, dots: false, area: true, baseline: d.cardiovascular.rhr }));
+      chart = slot('day', w => lineChart(w, { key: 'hr', vals: bpm, labels, color, tips, dots: false, area: true, baseline: d.cardiovascular.rhr }));
       const z = d.strain.zone_minutes || {};
-      const zrows = [['fat_burn', 'Fat burn', 'var(--fair)'], ['cardio', 'Cardio', 'var(--activity)'], ['peak', 'Peak', 'var(--poor)']];
-      const zmax = Math.max(1, ...zrows.map(([k]) => z[k] || 0));
-      extra = `<section class="panel"><h2 class="card-label" style="font-size:1rem">Heart rate zones</h2><div class="rows">${zrows.map(([k, lab, c]) => `<div class="row">
-          <div class="row-main"><div class="row-title">${lab}</div></div>
-          <svg class="row-meter" viewBox="0 0 100 8" preserveAspectRatio="none" style="height:8px" aria-hidden="true"><rect width="100" height="8" rx="4" style="fill:var(--raised)"/><rect width="${(z[k] || 0) / zmax * 100}" height="8" rx="4" style="fill:${c}"/></svg>
-          <div class="row-val">${z[k] || 0} min</div></div>`).join('')}</div></section>`
+      const dayName = relativeDay(d.date) ? relativeDay(d.date).toLowerCase() : `on ${shortDate(d.date)}`;
+      // Day stats from the per-minute averages (the chart above shows 10-minute samples).
+      const hs = d.strain.hr_stats || { avg: Math.round(mean(bpm)), min: Math.min(...bpm), max: Math.max(...bpm), max_time: hr[bpm.indexOf(Math.max(...bpm))].time };
+      chart += `<div class="hr-detail" data-hr-date="${d.date}"><p class="note hr-status">Loading every reading for this day…</p></div>`;
+      extra = `<div class="hr-extra"><section class="panel"><div class="panel-title"><span class="label">Time in each zone ${esc(dayName)}</span></div>${zoneBars(z, d.cardiovascular.rhr, state.data.profile.zone_max_hr || state.data.profile.max_hr)}</section>`
         + statCards([
-          { label: 'Average', value: `${Math.round(mean(bpm))} bpm` },
-          { label: 'Lowest', value: `${Math.min(...bpm)} bpm` },
-          { label: 'Highest', value: `${Math.max(...bpm)} bpm`, sub: `at ${hr[bpm.indexOf(Math.max(...bpm))].time}` },
+          { label: 'Average', value: `${hs.avg} bpm` },
+          { label: 'Lowest', value: `${hs.min} bpm`, sub: 'minute average' },
+          { label: 'Highest', value: `${hs.max} bpm`, sub: `at ${hs.max_time}` },
           { label: 'Resting', value: valueText('rhr', d.cardiovascular.rhr) },
-        ]);
+        ]) + '</div>';
     }
   } else if (m.intraday === 'hypnogram') {
     const st = (d.sleep.hypnogram || []).filter(s => s.time && s.seconds);
@@ -1069,16 +1395,20 @@ function detailDay(key, color) {
         const cls = x.impact > 0.05 ? 'good' : x.impact < -0.05 ? 'poor' : '';
         const wPct = Math.abs(x.impact) / maxImp * 50;
         return `<div class="row">
-          <div class="row-main"><div class="row-title">${esc(M[k].label)}</div><div class="row-sub">${esc(valueText(k, M[k].pick(d)))} · usual ${esc(valueText(k, baselineOf(k, idx)))} · weight ${Math.round(x.weight * 100)}%</div></div>
+          <div class="row-main"><div class="row-title">${esc(M[k].label)}</div><div class="row-sub">${esc(valueText(k, M[k].pick(d)))} · usual ${esc(valueText(k, baselineOf(k, idx)))} · weight ${Math.round(x.weight * 100)}%${k === 'temp' || k === 'resp' ? ' · steady is best' : ''}</div></div>
           <svg class="row-meter" viewBox="0 0 100 10" preserveAspectRatio="none" style="height:10px" aria-hidden="true">
             <rect width="100" height="10" rx="5" style="fill:var(--raised)"/>
             <rect x="${x.impact >= 0 ? 50 : 50 - wPct}" width="${Math.max(1, wPct)}" height="10" rx="3" style="fill:var(--${cls || 'text-3'})"/>
             <rect x="49.6" width="0.8" height="10" style="fill:var(--text-3)"/></svg>
           <div class="row-val ${cls}">${x.impact > 0 ? '+' : x.impact < 0 ? '−' : ''}${fmt(Math.abs(x.impact), 1)}</div></div>`;
-      }).join('')}</div><p class="note">Points each vital added to or took from your score, compared with your previous ${BASELINE_DAYS} days.</p>`;
+      }).join('')}</div><p class="note">Points each vital moved your score up or down from a typical night: starting from 50, they add up to your score.</p>`;
+    } else if (d.cardiovascular.hrv_rmssd != null || isNum(d.cardiovascular.rhr)) {
+      chart = `<p class="empty">Still building your baseline: recovery needs at least two vitals with 14 nights of data in the last 28 days${isNum(d.recovery.inputs_used) ? ` (${d.recovery.inputs_used} ready so far)` : ''}.</p>`;
     } else {
       chart = '<p class="empty">Recovery is calculated once last night’s HRV syncs.</p>';
     }
+  } else if (m.intraday === 'bioage') {
+    chart = bioAgeDetail(d, idx);
   } else if (m.intraday === 'scoreDrivers') {
     const sl = d.sleep;
     const model = state.data.overview.sleep_score_model || {};
@@ -1129,6 +1459,17 @@ function detailDay(key, color) {
       + slot('week', w => lineChart(w, { key, vals: wv, labels: wl, color, tips: wt, hrefs: wh, selPos: wv.length - 1, band: r, H: 170 }));
   }
 
+  if (key === 'vo2' && isNum(v)) {
+    const b = d.body_age || {};
+    const fa = b.fitness_age_limit === 'lower' ? '25 or younger' : b.fitness_age_limit === 'upper' ? '75 or older' : isNum(b.fitness_age) ? fmt(b.fitness_age, 0) : '--';
+    extra = statCards([
+      { label: 'For your age', value: isNum(b.percentile) ? (b.percentile >= 50 ? `Top ${100 - b.percentile}%` : `Bottom ${b.percentile}%`) : '--', sub: b.tier ? b.tier.replace(' for your age', '') : '' },
+      { label: 'Fitness age', value: fa, sub: isNum(b.age_delta) ? `${b.age_delta > 0 ? '+' : b.age_delta < 0 ? '−' : ''}${fmt(Math.abs(b.age_delta), 0)} years vs your age` : '' },
+      { label: 'Usual', value: valueText(key, baselineOf(key, idx)), sub: `${BASELINE_DAYS}-day average` },
+      { label: '30-day high', value: valueText(key, r && r.max) },
+    ]);
+  }
+
   if (!extra && m.intraday !== 'drivers') {
     extra = statCards([
       { label: 'Usual', value: valueText(key, baselineOf(key, idx)), sub: `${BASELINE_DAYS}-day average` },
@@ -1138,16 +1479,32 @@ function detailDay(key, color) {
     ]);
   }
 
-  const label = relativeDay(day().date) || longDate(day().date);
+  // The period bar above already names the day.
+  const label = m.cardLabel || m.label;
   const valHtml = isNum(v) ? valueHtml(key, v, 'detail-' + key) : '';
   let note = di.text && isNum(v) ? di.text : '';
   let noteCls = di.cls;
+  if (key === 'bioAge' && d.bio_age && d.bio_age.status === 'ok') {
+    const b = d.bio_age;
+    note = `${b.delta === 0 ? 'Same as' : `${fmt(Math.abs(b.delta), 1)} years ${b.delta < 0 ? 'younger' : 'older'} than`} your age (${b.chronological}) · ±${b.sigma}${b.floored ? ' · 17.0 is the lowest shown' : ''}`;
+    noteCls = b.delta < 0 ? 'good' : b.delta > 0 ? 'poor' : '';
+    const paceText = isNum(b.pace)
+      ? (b.pace === 1 ? 'Steady' : b.pace < 1 ? 'Getting younger' : 'Getting older')
+      : 'Needs 90 days';
+    extra = statCards([
+      { label: 'Body age', value: `${fmt(b.value, 1)}`, sub: `±${b.sigma} years` },
+      { label: 'Your age', value: String(b.chronological) },
+      { label: 'Pace of aging', value: isNum(b.pace) ? `${fmt(b.pace, 1)}×` : '--', sub: isNum(b.pace_change) ? `${paceText} · ${b.pace_change > 0 ? '+' : b.pace_change < 0 ? '−' : ''}${fmt(Math.abs(b.pace_change), 1)} y vs 6-month` : paceText },
+      { label: 'Biggest lever', value: b.levers[0] ? b.levers[0].label : '--', sub: b.levers[0] ? `−${fmt(Math.abs(b.levers[0].years), 1)} years` : '' },
+    ]);
+  }
   if (key === 'sleepScore' && isNum(v)) {
     const model = state.data.overview.sleep_score_model || {};
     note = d.sleep.score_source === 'app' ? 'From the Fitbit app' : `Estimated · typically within ±${model.mae}`;
     noteCls = '';
   }
-  const emptyText = key === 'sleepScore' && isNum(d.sleep.duration_minutes) ? 'No score' : 'No data';
+  const emptyText = key === 'sleepScore' && isNum(d.sleep.duration_minutes) ? 'No score'
+    : key === 'recovery' && d.recovery.status === 'Calibrating' && (d.cardiovascular.hrv_rmssd != null || isNum(d.cardiovascular.rhr)) ? 'Calibrating' : 'No data';
   const panel = `${headline(label, valHtml, note, noteCls, emptyText)}${chart}`;
   return { panel, after: extra };
 }
@@ -1168,18 +1525,25 @@ function detailPeriod(key, range, p, color) {
   const summaryVals = vals.map((v, i) => (partial && p.dates[i] === todayIso ? null : v));
   const s = periodSummary(key, summaryVals);
 
-  // Compare with the period before.
+  // Compare with the period before, like for like: while this period is still
+  // running, only the same number of days from the start of the previous one.
   const prevP = periodOf(range, isoOf(addDays(parseDate(p.start), -1)));
-  const prevVals = prevP.dates.map(iso => { const i = dateIndex(iso); return i >= 0 ? m.pick(days()[i]) : null; });
+  const lastCounted = p.dates.filter(iso => iso <= todayIso && !(partial && iso === todayIso)).length;
+  const sameSpan = lastCounted < p.dates.length;
+  const prevDates = sameSpan ? prevP.dates.slice(0, lastCounted) : prevP.dates;
+  const prevVals = prevDates.map(iso => { const i = dateIndex(iso); return i >= 0 ? m.pick(days()[i]) : null; });
   const prevS = periodSummary(key, prevVals);
+  const rangeName = range === '3m' ? '3 months' : range;
   let note = '';
   let noteCls = '';
-  if (s && prevS) {
+  if (s && prevS && lastCounted > 0) {
     const a = s.avg, b = prevS.avg;
     const pct = b ? (a - b) / Math.abs(b) * 100 : 0;
-    if (Math.abs(pct) < 0.5) note = 'Same as the previous period';
+    const span = `${lastCounted} ${lastCounted === 1 ? 'day' : 'days'}`;
+    const than = !sameSpan ? `the previous ${rangeName}` : range === '3m' ? `the first ${span} of the previous 3 months` : `the same ${span} last ${rangeName}`;
+    if (Math.abs(pct) < 0.5) note = `Same as ${than}`;
     else {
-      note = `${Math.abs(pct).toFixed(Math.abs(pct) < 10 ? 1 : 0)}% ${pct > 0 ? 'higher' : 'lower'} than the previous ${range === '3m' ? '3 months' : range}`;
+      note = `${Math.abs(pct).toFixed(Math.abs(pct) < 10 ? 1 : 0)}% ${pct > 0 ? 'higher' : 'lower'} than ${than}`;
       if (m.better) noteCls = (pct > 0) === (m.better === 'higher') ? 'good' : 'poor';
     }
   }
@@ -1206,8 +1570,295 @@ function detailPeriod(key, range, p, color) {
   };
 }
 
+// ---------- Day strip scrolling ----------
+// Keep the strip where the person left it across re-renders, then glide the
+// selected day into the middle.
+let stripScroll = null;
+function placeStrip(root) {
+  const strip = root.querySelector('.week');
+  if (!strip) return;
+  const sel = strip.querySelector('[aria-current="date"]');
+  if (!sel) return;
+  const target = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
+  if (stripScroll === null) strip.scrollLeft = target;
+  else {
+    strip.scrollLeft = stripScroll;
+    requestAnimationFrame(() => strip.scrollTo({ left: target, behavior: reducedMotion ? 'auto' : 'smooth' }));
+  }
+  stripScroll = target;
+  strip.addEventListener('scroll', () => { stripScroll = strip.scrollLeft; }, { passive: true });
+}
+
+// ---------- Heart rate: every reading, loaded on demand ----------
+// The dashboard file keeps only summaries. A day's raw readings (about one
+// every 2 s) come from the phone's storage (DataStrapHost.dayHeartRate) or the
+// local server (/hr/<date>.json) when the page is opened, so nothing grows.
+const hrCache = new Map();
+async function loadDayHr(date) {
+  if (hrCache.has(date)) return hrCache.get(date);
+  let data = null;
+  try {
+    if (window.DataStrapHost && window.DataStrapHost.dayHeartRate) data = await window.DataStrapHost.dayHeartRate(date);
+    else if (!state.demo) {
+      const res = await fetch(`hr/${date}.json`, { cache: 'no-cache' });
+      if (res.ok) data = await res.json();
+    }
+  } catch { data = null; }
+  if (hrCache.size >= 6) hrCache.delete(hrCache.keys().next().value);
+  hrCache.set(date, data);
+  return data;
+}
+
+const hms = sec => `${String(Math.floor(sec / 3600)).padStart(2, '0')}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+
+// Each reading counts until the next one (at most 10 s; minute averages count 60 s).
+function analyseDayHr(data, rhr, maxHr) {
+  const { t, b } = data;
+  const gap = data.resolution === 'minute' ? 60 : 10;
+  const dur = t.map((x, i) => (i + 1 < t.length ? Math.min(t[i + 1] - x, gap) : gap));
+  let total = 0, wsum = 0, lo = 0, hi = 0;
+  const zones = { light: 0, moderate: 0, vigorous: 0, peak: 0 };
+  const hours = Array.from({ length: 24 }, () => null);
+  t.forEach((x, i) => {
+    const v = b[i], d = dur[i];
+    total += d; wsum += v * d;
+    if (v < b[lo]) lo = i;
+    if (v > b[hi]) hi = i;
+    if (isNum(rhr)) zones[zoneOf(v, rhr, maxHr)[0]] += d;
+    const h = Math.min(23, Math.floor(x / 3600));
+    const hr = hours[h] || (hours[h] = { sum: 0, dur: 0, min: v, max: v, maxT: x, n: 0 });
+    hr.sum += v * d; hr.dur += d; hr.n += 1;
+    if (v < hr.min) hr.min = v;
+    if (v > hr.max) { hr.max = v; hr.maxT = x; }
+  });
+  return {
+    n: t.length, worn: total, avg: total ? Math.round(wsum / total) : null,
+    min: b[lo], minT: t[lo], max: b[hi], maxT: t[hi],
+    zones: Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, v / 60])),
+    hours: hours.map(h => (h ? { avg: Math.round(h.sum / h.dur), min: h.min, max: h.max, maxT: h.maxT, n: h.n } : null)),
+  };
+}
+
+// The whole day as one smooth line (5-minute averages of every reading) over
+// a soft fill, with the resting line and the true peak. The second-by-second
+// detail lives in the hour zoom below, so the day view stays calm.
+function dayEnvelopeChart(data, rhr, maxHr, focus, stats) {
+  return w => {
+    const H = 220, top = 22, bottom = 26, padL = 4, padR = 36;
+    const plotB = H - bottom;
+    const x = scale(0, 86400, padL, w - padR);
+    const BIN = 300;
+    const sums = new Array(288).fill(0), counts = new Array(288).fill(0);
+    data.t.forEach((sec, i) => { const k = Math.min(287, Math.floor(sec / BIN)); sums[k] += data.b[i]; counts[k] += 1; });
+    const pts = [];
+    for (let k = 0; k < 288; k++) if (counts[k]) pts.push([k * BIN + BIN / 2, sums[k] / counts[k]]);
+    const vals = pts.map(p => p[1]);
+    const lo = Math.floor((Math.min(...vals, isNum(rhr) ? rhr : Infinity) - 6) / 10) * 10;
+    const hi = Math.ceil((Math.max(stats.max, ...vals) + 4) / 10) * 10;
+    const y = scale(lo, hi, plotB, top);
+    // Break the line where the band wasn't worn for more than 30 minutes.
+    let line = '';
+    let area = '';
+    let run = [];
+    const flush = () => {
+      if (run.length > 1) {
+        const d = run.map(([t, v], i) => `${i ? 'L' : 'M'}${x(t).toFixed(1)},${y(v).toFixed(1)}`).join('');
+        line += d;
+        area += `${d}L${x(run[run.length - 1][0]).toFixed(1)},${plotB}L${x(run[0][0]).toFixed(1)},${plotB}Z`;
+      }
+      run = [];
+    };
+    pts.forEach((p, i) => { if (i && p[0] - pts[i - 1][0] > 1800) flush(); run.push(p); });
+    flush();
+    const labels = [lo, Math.round((lo + hi) / 2), hi].map(v => `<text x="${w - padR + 6}" y="${y(v) + 4}">${v}</text>`).join('');
+    const rest = isNum(rhr) ? `<line class="goal" x1="${padL}" x2="${w - padR}" y1="${y(rhr)}" y2="${y(rhr)}"/>` : '';
+    const band = focus !== null ? `<rect x="${x(focus * 3600)}" y="${top - 8}" width="${x(3600) - x(0)}" height="${plotB - top + 8}" rx="4" style="fill:var(--text);opacity:.07"/>` : '';
+    const px = x(stats.maxT), py = y(stats.max);
+    const peak = `<circle cx="${px}" cy="${py}" r="4" style="fill:var(--text);stroke:var(--card);stroke-width:2"/>
+      <text x="${px}" y="${py - 9}" text-anchor="middle" style="fill:var(--text);font-weight:600">${stats.max}</text>`;
+    const xt = [[0, '12a', 'start'], [21600, '6a', 'middle'], [43200, '12p', 'middle'], [64800, '6p', 'middle'], [86400, '12a', 'end']]
+      .map(([sec, lab, a]) => `<text x="${x(sec)}" y="${H - 6}" text-anchor="${a}">${lab}</text>`).join('');
+    // One scrub layer: the finger (or mouse) is followed continuously along the
+    // 5-minute line; a tap without sliding still zooms into that hour.
+    const scrubPts = JSON.stringify(pts.map(([t, v]) => [+x(t).toFixed(1), +y(v).toFixed(1), Math.round(v), t]));
+    const hits = `<g class="scrub-mark" hidden><line y1="${top - 8}" y2="${plotB}"/><circle r="4.5"/></g>
+      <rect class="day-scrub" x="${padL}" y="${top - 8}" width="${w - padR - padL}" height="${plotB - top + 8}" data-pts='${scrubPts}'/>`;
+    return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="Heart rate through the day">
+      <defs><linearGradient id="dayFade" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF6F8E" stop-opacity=".22"/><stop offset="1" stop-color="#FF6F8E" stop-opacity="0"/></linearGradient></defs>
+      ${band}<path d="${area}" fill="url(#dayFade)"/>${rest}
+      <path d="${line}" style="fill:none;stroke:var(--heart);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
+      ${peak}${labels}${xt}${hits}
+    </svg>`;
+  };
+}
+
+function heartDetailHtml(data, stats, rhr, maxHr, focus) {
+  const perSecond = data.resolution === 'second';
+  const hourRows = stats.hours.map((h, i) => {
+    if (!h) return '';
+    const pos = v => Math.max(0, Math.min(100, (v - 40) / (200 - 40) * 100));
+    return `<button type="button" class="hour-row ${i === focus ? 'on' : ''}" data-hour="${i}">
+      <span class="hour-time">${String(i).padStart(2, '0')}:00</span>
+      <span class="hour-bar"><i style="left:${pos(h.min)}%;width:${Math.max(1, pos(h.max) - pos(h.min))}%"></i><b style="left:${pos(h.avg)}%"></b></span>
+      <span class="hour-num"><b>${h.avg}</b> ${h.min}–${h.max}</span>
+    </button>`;
+  }).join('');
+  let zoom = '';
+  if (focus !== null && stats.hours[focus]) {
+    const lo = focus * 3600;
+    const idx = [];
+    data.t.forEach((sec, i) => { if (sec >= lo && sec < lo + 3600) idx.push(i); });
+    const pseudo = { name: 'this hour', time: `${String(focus).padStart(2, '0')}:00`, duration_minutes: 60, hr_t: idx.map(i => data.t[i] - lo), hr_bpm: idx.map(i => data.b[i]) };
+    const h = stats.hours[focus];
+    zoom = `<div class="hr-zoom">
+      <div class="panel-title"><span class="label">${String(focus).padStart(2, '0')}:00–${String((focus + 1) % 24).padStart(2, '0')}:00 · ${perSecond ? 'every reading' : 'minute averages'}</span>
+      <b>${h.avg}<small>bpm avg · ${h.min}–${h.max} · peak at ${hms(h.maxT)}</small></b></div>
+      ${slot('hrHour', workoutChart(pseudo, rhr, maxHr))}
+    </div>`;
+  }
+  return `<p class="note">${perSecond ? `Every reading: ${fmt(stats.n)}, about one every ${Math.max(1, Math.round(stats.worn / stats.n))} s, worn ${fmtDur(stats.worn / 60)}.` : 'Minute averages (raw readings aren’t stored on this device for this day).'} The line shows 5-minute averages; the dashed line is your resting heart rate. Tap the chart to see every reading in an hour.</p>
+    ${zoom}
+    <details class="hours-toggle" ${state.hrHoursOpen ? 'open' : ''}>
+      <summary><span>Show hourly breakdown</span><span class="when-open">Hide hourly breakdown</span>${ph('chevron-right', 'toggle-chev')}</summary>
+      <div class="hours">${hourRows}</div>
+    </details>`;
+}
+
+async function hydrateHeartDetail(root) {
+  const box = root.querySelector('[data-hr-date]');
+  if (!box) return;
+  const date = box.dataset.hrDate;
+  const data = await loadDayHr(date);
+  if (!box.isConnected) return;
+  if (!data || !data.t || data.t.length < 2) {
+    box.innerHTML = '<p class="note">Showing 10-minute samples: detailed readings aren’t available for this day.</p>';
+    return;
+  }
+  const d = days()[dateIndex(date)];
+  const rhr = d.cardiovascular.rhr;
+  const maxHr = state.data.profile.zone_max_hr || state.data.profile.max_hr;
+  const stats = analyseDayHr(data, rhr, maxHr);
+  const draw = () => {
+    const focus = state.hrFocus && state.hrFocus.date === date ? state.hrFocus.hour : null;
+    charts.day = dayEnvelopeChart(data, rhr, maxHr, focus, stats);
+    box.innerHTML = heartDetailHtml(data, stats, rhr, maxHr, focus);
+    const panel = box.closest('.panel');
+    mountCharts(panel, false);
+    const extra = root.querySelector('.hr-extra');
+    if (extra) {
+      extra.innerHTML = `<section class="panel"><div class="panel-title"><span class="label">Time in each zone · every reading</span></div>${zoneBars(stats.zones, rhr, maxHr)}</section>`
+        + statCards([
+          { label: 'Average', value: `${stats.avg} bpm`, sub: 'time-weighted' },
+          { label: 'Lowest', value: `${stats.min} bpm`, sub: `at ${hms(stats.minT)}` },
+          { label: 'Highest', value: `${stats.max} bpm`, sub: `at ${hms(stats.maxT)}` },
+          { label: 'Resting', value: valueText('rhr', rhr) },
+        ]);
+    }
+  };
+  draw();
+  box.addEventListener('toggle', e => { if (e.target.matches('.hours-toggle')) state.hrHoursOpen = e.target.open; }, true);
+  bindDayScrub(box.closest(".panel"), hour => {
+    state.hrFocus = state.hrFocus && state.hrFocus.date === date && state.hrFocus.hour === hour ? null : { date, hour };
+    draw();
+  });
+  box.closest('.panel').onclick = e => {
+    const h = e.target.closest('.hour-row[data-hour]');
+    if (!h) return;
+    const hour = Number(h.dataset.hour);
+    state.hrFocus = state.hrFocus && state.hrFocus.date === date && state.hrFocus.hour === hour ? null : { date, hour };
+    hideTip();
+    draw();
+  };
+}
+
+// Follows the pointer along the day chart. Updates are batched to one per
+// frame and only move existing SVG nodes, so sliding stays smooth.
+function bindDayScrub(box, onTap) {
+  let pts = null, mark = null, rect = null, frame = 0, lastX = 0, startX = 0, moved = false, active = false;
+  const tip = $('#tooltip');
+  const update = () => {
+    frame = 0;
+    const box2 = rect.getBoundingClientRect();
+    const sx = rect.ownerSVGElement.viewBox.baseVal.width / rect.ownerSVGElement.getBoundingClientRect().width;
+    const px = (lastX - rect.ownerSVGElement.getBoundingClientRect().left) * sx;
+    let lo = 0, hi = pts.length - 1;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (pts[m][0] < px) lo = m + 1; else hi = m; }
+    if (lo > 0 && px - pts[lo - 1][0] < pts[lo][0] - px) lo -= 1;
+    const [cx, cy, bpm, t] = pts[lo];
+    mark.removeAttribute('hidden');
+    mark.querySelector('line').setAttribute('x1', cx);
+    mark.querySelector('line').setAttribute('x2', cx);
+    const c = mark.querySelector('circle');
+    c.setAttribute('cx', cx); c.setAttribute('cy', cy);
+    tip.innerHTML = `<b>${bpm} bpm</b><span>${hms(t - 150).slice(0, 5)}–${hms(t + 150).slice(0, 5)}</span>`;
+    tip.hidden = false;
+    const svgR = rect.ownerSVGElement.getBoundingClientRect();
+    tip.style.left = `${Math.min(Math.max(svgR.left + cx / sx, 80), window.innerWidth - 80)}px`;
+    tip.style.top = `${box2.top + 6}px`;
+  };
+  const end = e => {
+    if (!active) return;
+    active = false;
+    if (frame) cancelAnimationFrame(frame), frame = 0;
+    mark.setAttribute('hidden', ''); hideTip();
+    if (!moved && e.type === 'pointerup') {
+      const s = rect.ownerSVGElement, f = (e.clientX - s.getBoundingClientRect().left) / s.getBoundingClientRect().width;
+      const t = (f * s.viewBox.baseVal.width - 4) / (s.viewBox.baseVal.width - 40) * 86400;
+      const hour = Math.max(0, Math.min(23, Math.floor(t / 3600)));
+      if (pts.some(p => Math.floor(p[3] / 3600) === hour)) onTap(hour);
+    }
+  };
+  box.addEventListener('pointerdown', e => {
+    rect = e.target.closest('.day-scrub');
+    if (!rect) return;
+    pts = JSON.parse(rect.dataset.pts);
+    if (!pts.length) return;
+    mark = rect.ownerSVGElement.querySelector('.scrub-mark');
+    active = true; moved = false; startX = lastX = e.clientX;
+    try { rect.setPointerCapture(e.pointerId); } catch {}
+    update();
+  });
+  box.addEventListener('pointermove', e => {
+    if (!active) return;
+    lastX = e.clientX;
+    if (Math.abs(lastX - startX) > 6) moved = true;
+    if (!frame) frame = requestAnimationFrame(update);
+  });
+  box.addEventListener('pointerup', end);
+  box.addEventListener('pointercancel', end);
+}
+
+// ---------- Tab bar (phones) ----------
+const TABS = [
+  { id: 'today', label: 'Today', icon: 'house', href: iso => hrefHome(iso), keys: [] },
+  { id: 'recovery', label: 'Recovery', icon: 'battery-charging', href: iso => hrefMetric('recovery', 'day', iso), keys: ['recovery'] },
+  { id: 'sleep', label: 'Sleep', icon: 'moon', href: iso => hrefMetric('sleep', 'day', iso), keys: ['sleep', 'sleepScore', 'efficiency'] },
+  { id: 'strain', label: 'Strain', icon: 'zap', href: iso => hrefMetric('strain', 'day', iso), keys: ['strain', 'steps', 'energy', 'zones'] },
+  { id: 'heart', label: 'Heart', icon: 'heart-pulse', href: iso => hrefMetric('hr', 'day', iso), keys: ['hr', 'hrv', 'rhr', 'stress'] },
+];
+
+let lastTab = null;
+function renderTabbar() {
+  let bar = $('#tabbar');
+  if (!bar) {
+    bar = document.createElement('nav');
+    bar.id = 'tabbar';
+    bar.className = 'tabbar';
+    bar.setAttribute('aria-label', 'Sections');
+    document.body.appendChild(bar);
+  }
+  const r = state.route;
+  const active = r.page === 'home' ? 'today' : r.page === 'workout' ? 'strain' : (TABS.find(t => t.keys.includes(r.key)) || {}).id;
+  const iso = day().date;
+  bar.innerHTML = TABS.map(t => `<a href="${t.href(iso)}" class="tab ${t.id === active ? 'on' : ''} ${t.id === active && lastTab !== null && lastTab !== active ? 'pop' : ''}" ${t.id === active ? 'aria-current="page"' : ''} style="--accent:${t.id === 'today' ? 'var(--text)' : t.id === 'recovery' ? 'var(--good)' : GROUPS[t.id === 'strain' ? 'activity' : t.id].color}">
+      <span class="tab-icon">${ph(t.icon, '', t.id === active ? 'fill' : 'regular')}</span><span class="tab-label">${t.label}</span></a>`).join('');
+  lastTab = active;
+}
+
 // ---------- Render ----------
+let renders = 0;
 function render({ pageEnter = false } = {}) {
+  renders++;
   const d = day();
   const rel = relativeDay(d.date);
   $('#dateText').textContent = rel ? `${rel}, ${shortDate(d.date)}` : longDate(d.date);
@@ -1218,29 +1869,42 @@ function render({ pageEnter = false } = {}) {
 
   charts = {};
   const main = $('#main');
-  main.innerHTML = state.route.page === 'home' ? renderHome() : renderDetail();
-  document.title = state.route.page === 'home' ? 'DataStrap' : `${M[state.route.key].label} · DataStrap`;
+  const page = state.route.page;
+  main.innerHTML = page === 'home' ? renderHome() : page === 'workout' ? renderWorkout() : renderDetail();
+  document.title = page === 'home' ? 'DataStrap'
+    : page === 'workout' ? `${day().strain.workouts[state.route.index].name} · DataStrap` : `${M[state.route.key].label} · DataStrap`;
   if (pageEnter && !reducedMotion) {
     main.classList.remove('enter', 'enter-detail');
     void main.offsetWidth;
     main.classList.add(state.route.page === 'home' ? 'enter' : 'enter-detail');
   }
+  renderTabbar();
+  placeStrip(main);
   mountCharts(main, true);
+  hydrateHeartDetail(main);
   animateNumbers(main);
   // Rings start empty and sweep to their value on the next frame.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     main.querySelectorAll('[data-target]').forEach(arc => { arc.style.strokeDashoffset = arc.dataset.target; });
   }));
-  observeReveals(main);
+  observeReveals(main, { cascade: renders === 1 });
   if (pageEnter) main.focus({ preventScroll: true });
 }
 
 // Cards fade up as they scroll into view, and their charts draw at that moment
 // rather than off-screen.
 let revealObserver = null;
-function observeReveals(root) {
+function observeReveals(root, { cascade = true } = {}) {
   if (revealObserver) revealObserver.disconnect();
+  document.body.classList.toggle('first-load', cascade);
   const items = [...root.querySelectorAll('.reveal')];
+  if (!cascade) {
+    // After the first screen, content already in view appears with the page
+    // transition instead of fading in piece by piece.
+    for (const el of items) {
+      if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('in', 'instant');
+    }
+  }
   items.forEach(el => {
     const siblings = [...el.parentElement.children].filter(c => c.classList.contains('reveal'));
     el.style.setProperty('--i', Math.min(siblings.indexOf(el), 8));
@@ -1249,6 +1913,7 @@ function observeReveals(root) {
     items.forEach(el => el.classList.add('in'));
     return;
   }
+  const pending = items.filter(el => !el.classList.contains('in'));
   revealObserver = new IntersectionObserver(entries => {
     for (const e of entries) {
       if (!e.isIntersecting) continue;
@@ -1257,7 +1922,7 @@ function observeReveals(root) {
       if (e.boundingClientRect.top > window.innerHeight * 0.6) mountCharts(e.target, true);
     }
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
-  items.forEach(el => revealObserver.observe(el));
+  pending.forEach(el => revealObserver.observe(el));
   // Safety net: never leave on-screen content hidden if the observer doesn't fire.
   setTimeout(() => {
     items.forEach(el => { if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('in'); });
@@ -1284,6 +1949,57 @@ function showTip(el) {
 }
 const hideTip = () => { $('#tooltip').hidden = true; };
 
+// Touch scrubbing for every chart built on hitStrips (trends, intraday lines
+// and bars, workouts): the finger is followed across the columns, one update
+// per frame. A tap still opens a column's link; a slide doesn't.
+function bindChartScrub() {
+  let s = null;
+  const mark = (hit, on) => { const m = hit && hit.nextElementSibling; if (m && m.classList.contains('hover-mark')) m.classList.toggle('on', on); };
+  const update = () => {
+    if (!s) return;
+    s.frame = 0;
+    const { cols } = s;
+    let lo = 0, hi = cols.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (cols[m].left <= s.x) lo = m; else hi = m - 1; }
+    const hit = cols[lo].el;
+    if (hit === s.cur) return;
+    mark(s.cur, false);
+    s.cur = hit;
+    mark(hit, true);
+    showTip(hit);
+  };
+  const end = () => {
+    if (!s) return;
+    if (s.frame) cancelAnimationFrame(s.frame);
+    mark(s.cur, false);
+    hideTip();
+    if (s.moved) {
+      const block = e => { e.stopPropagation(); e.preventDefault(); };
+      addEventListener('click', block, { capture: true, once: true });
+      setTimeout(() => removeEventListener('click', block, { capture: true }), 400);
+    }
+    s = null;
+  };
+  document.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;
+    const hit = e.target.closest('.hit');
+    if (!hit || !hit.dataset.tip) return;
+    const cols = [...hit.closest('svg').querySelectorAll('.hit[data-tip]')]
+      .map(el => ({ el, left: el.getBoundingClientRect().left })).sort((a, b) => a.left - b.left);
+    s = { cols, x: e.clientX, startX: e.clientX, cur: null, frame: 0, moved: false };
+    try { hit.setPointerCapture(e.pointerId); } catch {}
+    update();
+  });
+  document.addEventListener('pointermove', e => {
+    if (!s) return;
+    s.x = e.clientX;
+    if (Math.abs(s.x - s.startX) > 6) s.moved = true;
+    if (!s.frame) s.frame = requestAnimationFrame(update);
+  });
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+}
+
 // ---------- Events ----------
 function bindEvents() {
   $('#prevDay').addEventListener('click', () => setDay(state.idx - 1));
@@ -1307,6 +2023,7 @@ function bindEvents() {
 
   document.addEventListener('pointerover', e => { const t = e.target.closest('[data-tip]'); if (t) showTip(t); });
   document.addEventListener('pointerout', e => { if (e.target.closest('[data-tip]')) hideTip(); });
+  bindChartScrub();
   window.addEventListener('scroll', () => {
     hideTip();
     $('.bar').classList.toggle('scrolled', window.scrollY > 4);
@@ -1362,32 +2079,63 @@ function shiftDemoDates(data) {
   data.overview.date_end = data.days[data.days.length - 1].date;
 }
 
+// Shows a dataset: header initials, footer, and the selected day. Keeps the
+// day being viewed when the data is refreshed, unless that was the latest day.
+function showData(data, { demo = false } = {}) {
+  const prev = state.data ? days()[state.idx]?.date : null;
+  const wasLatest = !state.data || state.idx === days().length - 1;
+  state.data = data;
+  state.demo = demo;
+  const keep = prev && !wasLatest ? days().findIndex(d => d.date === prev) : -1;
+  state.idx = keep >= 0 ? keep : days().length - 1;
+  M.temp.unit = useF() ? '°F' : '°C';
+  const p = data.profile;
+  const initials = (p.name || '').split(/\s+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase();
+  $('#avatar').textContent = initials;
+  $('#avatar').hidden = !initials || demo;
+  $('#demoBanner').hidden = !demo;
+  const o = data.overview;
+  $('#foot').textContent = demo
+    ? 'Sample data for a fictional person'
+    : `${o.total_days_analyzed} days from Fitbit · ${shortDate(o.date_start)} – ${shortDate(o.date_end)}`;
+}
+
+// The Android app (mobile/) computes the data on the phone and provides it
+// through window.DataStrapHost instead of dashboard_data.json.
+window.DataStrap = {
+  refresh(data) {
+    hrCache.clear();
+    const first = !state.data;
+    showData(data);
+    if (first) bindEvents();
+    lastHash = null; // re-render the current page with the new data
+    route();
+  },
+};
+
 document.addEventListener('DOMContentLoaded', async () => {
+  if (window.DataStrapHost) {
+    const data = await window.DataStrapHost.load();
+    if (data) window.DataStrap.refresh(data);
+    return;
+  }
+  let data;
+  let demo = false;
   try {
-    state.data = await loadJson('dashboard_data.json');
+    data = await loadJson('dashboard_data.json');
   } catch {
     try {
       // Not connected yet: show the bundled sample data.
-      state.data = await loadJson('demo_data.json');
-      state.demo = true;
-      shiftDemoDates(state.data);
+      data = await loadJson('demo_data.json');
+      demo = true;
+      shiftDemoDates(data);
     } catch (err) {
       console.error(err);
       $('#main').innerHTML = '<section class="panel"><h1 class="detail-title">Couldn’t load any data</h1><p class="note">Run <code>python3 setup.py</code> to connect your Fitbit, then reload.</p></section>';
       return;
     }
   }
-  state.idx = days().length - 1;
-  M.temp.unit = useF() ? '°F' : '°C';
-  const p = state.data.profile;
-  const initials = (p.name || '').split(/\s+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase();
-  $('#avatar').textContent = initials;
-  $('#avatar').hidden = !initials || state.demo;
-  $('#demoBanner').hidden = !state.demo;
-  const o = state.data.overview;
-  $('#foot').textContent = state.demo
-    ? 'Sample data for a fictional person'
-    : `${o.total_days_analyzed} days from Fitbit · ${shortDate(o.date_start)} – ${shortDate(o.date_end)}`;
+  showData(data, { demo });
   bindEvents();
   route();
 });

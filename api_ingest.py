@@ -167,6 +167,14 @@ def load_sleep_data():
     return out
 
 
+def _fitbit_zones(z):
+    """Fitbit's own minutes per zone for a workout, e.g. {'light': 28.0, ...}."""
+    if not z:
+        return None
+    return {k: round(float(str(z.get(f'{k}Time', '0s')).rstrip('s') or 0) / 60.0, 1)
+            for k in ('light', 'moderate', 'vigorous', 'peak')}
+
+
 def load_workouts():
     out = {}
     for p in _load_json('exercise'):
@@ -183,6 +191,11 @@ def load_workouts():
             'calories': round(m.get('caloriesKcal', 0)),
             'avg_hr': int(m.get('averageHeartRateBeatsPerMinute', 0)),
             'time': start.strftime('%H:%M'),
+            'steps': int(m['steps']) if m.get('steps') else None,
+            'distance_km': round(float(m['distanceMillimeters']) / 1e6, 2) if m.get('distanceMillimeters') else None,
+            'elevation_m': round(float(m['elevationGainMillimeters']) / 1000) if m.get('elevationGainMillimeters') else None,
+            'active_zone_minutes': int(m['activeZoneMinutes']) if m.get('activeZoneMinutes') else None,
+            'fitbit_zones': _fitbit_zones(m.get('heartRateZoneDurations')),
         })
     return out
 
@@ -220,6 +233,16 @@ def load_respiratory_rate():
         if d.get('breathsPerMinute') is not None:
             out[_iso(d['date'])] = round(float(d['breathsPerMinute']), 1)
     return out
+
+
+def load_workout_samples(workouts_by_date, select, windows_of):
+    """Raw API heart-rate readings around each workout ({date: [[seconds, bpm], ...]})."""
+    windows = windows_of(workouts_by_date)
+    df = _read_daily_csvs('heart-rate')
+    if df.empty or not windows:
+        return {}
+    local = _to_local(df['time'])
+    return select(local, df['bpm'].tolist(), windows)
 
 
 def load_intraday_hr():

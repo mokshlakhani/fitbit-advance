@@ -1,0 +1,15 @@
+{
+  "appId": "app.datastrap.personal",
+  "appName": "DataStrap",
+  "webDir": "www",
+  "backgroundColor": "#050506",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "auto"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": false
+    }
+  },
+  "loggingBehavior": "none"
+}

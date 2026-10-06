@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DataStrap</string>
+    <string name="title_activity_main">DataStrap</string>
+    <string name="package_name">app.datastrap.personal</string>
+    <string name="custom_url_scheme">app.datastrap.personal</string>
+</resources>

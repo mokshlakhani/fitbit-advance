@@ -5,6 +5,7 @@ so sign-in tokens, credentials and raw data in this folder are never exposed.
 """
 import argparse
 import os
+import re
 import socket
 import webbrowser
 from functools import partial
@@ -20,11 +21,32 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == '/':
             path = '/index.html'
+        m = re.fullmatch(r'/hr/(\d{4}-\d{2}-\d{2})\.json', path)
+        if m:
+            self.send_day_hr(m.group(1))
+            return
         if path not in PUBLIC:
             self.send_error(404)
             return
         self.path = path
         super().do_GET()
+
+    def send_day_hr(self, date):
+        # One day's raw heart-rate readings for the Heart page, fetched only when opened.
+        try:
+            import hr_detail
+            body = hr_detail.day_readings_json(date)
+        except Exception:
+            body = None
+        if body is None:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Encoding', 'gzip')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_HEAD(self):
         self.do_GET()

@@ -25,6 +25,12 @@
   --body: #3FD2E0;
   --activity: var(--strain);
 
+  /* Heart-rate zones (Fitbit's Active Zone Minutes bands) */
+  --z-light: #4FC3F7;
+  --z-moderate: #4ADE80;
+  --z-vigorous: #FFB547;
+  --z-peak: #FF5A6A;
+
   /* Sleep stages */
   --st-wake: #FF9F7A;
   --st-rem: #A8C8FF;
@@ -80,7 +86,7 @@ body::before {
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 svg { display: block; }
-.lucide { width: 18px; height: 18px; flex-shrink: 0; }
+.ph { width: 18px; height: 18px; flex-shrink: 0; display: block; }
 :focus-visible { outline: 2px solid var(--text); outline-offset: 3px; border-radius: 10px; }
 .page:focus { outline: none; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85em; }
@@ -155,7 +161,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
   color: var(--text-2);
   transition: background-color 160ms var(--ease), color 160ms var(--ease), transform 160ms var(--ease);
 }
-.icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn svg { width: 20px; height: 20px; fill: currentColor; }
 .icon-btn:hover:not(:disabled) { background: var(--raised); color: var(--text); }
 .icon-btn:active:not(:disabled) { transform: scale(0.92); }
 .icon-btn:disabled { opacity: 0.25; cursor: default; }
@@ -239,10 +245,20 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 
 /* ---------- Week strip ---------- */
 .week {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  --per-view: 7;
+  --gap: 6px;
+  display: flex;
+  gap: var(--gap);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* fade the edges so it reads as scrollable */
+  mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
 }
+.week::-webkit-scrollbar { display: none; }
+.week .wday { flex: 0 0 calc((100% - (var(--per-view) - 1) * var(--gap)) / var(--per-view)); scroll-snap-align: center; }
 .wday {
   position: relative;
   display: flex;
@@ -333,7 +349,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
   color: var(--mood);
   background: color-mix(in srgb, var(--mood) 14%, transparent);
 }
-.insight-icon .lucide { width: 21px; height: 21px; }
+.insight-icon .ph { width: 21px; height: 21px; }
 .insight h1 { font-size: 1.375rem; font-weight: 650; letter-spacing: -0.015em; line-height: 1.25; margin-top: 4px; }
 .insight p { color: var(--text-2); margin-top: 6px; max-width: 70ch; }
 .insight .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
@@ -422,7 +438,7 @@ a.card:active { transform: translateY(-1px) scale(0.99); }
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
-.glyph .lucide, .glyph svg { width: 16px; height: 16px; }
+.glyph .ph, .glyph svg { width: 18px; height: 18px; }
 .card-label {
   font-family: var(--font-label);
   font-weight: 600;
@@ -478,7 +494,7 @@ a.card:hover .chev { opacity: 1; transform: none; }
 .workout { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .workout:first-child { border-top: 0; }
 .workout .glyph { width: 38px; height: 38px; border-radius: 12px; }
-.workout .glyph .lucide { width: 19px; height: 19px; }
+.workout .glyph .ph { width: 19px; height: 19px; }
 .workout-name { font-weight: 600; }
 .workout-meta { font-size: 0.8125rem; color: var(--text-3); }
 .workout-strain { margin-left: auto; text-align: right; }
@@ -486,6 +502,90 @@ a.card:hover .chev { opacity: 1; transform: none; }
 .full .workouts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); column-gap: 28px; }
 .full .workout { padding: 12px 14px; border-radius: var(--r-lg); background: var(--card-2); border: 1px solid var(--line); margin-top: 8px; }
 .empty { color: var(--text-3); font-size: 0.875rem; padding: 6px 0; }
+
+/* Workout rows (tappable) and the workout page */
+a.workout { color: inherit; border-radius: var(--r-md); }
+a.workout:active { background: var(--raised); }
+.workout-main { min-width: 0; flex: 1; }
+.workout-name, .workout-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workout-chev { width: 16px; height: 16px; color: var(--text-3); flex-shrink: 0; }
+.workout-strain .label { font-size: 0.75rem; }
+.panel .workouts + .panel-title { margin-top: 6px; }
+
+.w-when { color: var(--text-2); font-size: 0.9375rem; margin-top: -10px; }
+.w-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.w-stat { padding: 14px 16px; border-radius: var(--r-lg); background: var(--card); border: 1px solid var(--line); }
+.w-stat.accent { background: color-mix(in srgb, var(--strain) 12%, var(--card)); border-color: color-mix(in srgb, var(--strain) 35%, transparent); }
+.w-stat-value { font-size: 1.625rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; }
+.w-stat.accent .w-stat-value { color: var(--strain); font-size: 2rem; }
+.w-stat-value .u { font-size: 0.6em; color: var(--text-2); font-weight: 600; margin-left: 3px; }
+
+.zones { display: flex; flex-direction: column; gap: 14px; }
+.zone-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 7px; }
+.zone-head b { font-weight: 600; }
+.zone-head span { color: var(--text-2); }
+.zone-head em { margin-left: auto; font-style: normal; font-size: 0.8125rem; color: var(--text-3); }
+.zone-track { height: 12px; border-radius: 6px; background: var(--raised); overflow: hidden; }
+.zone-track i { display: block; height: 100%; border-radius: 6px; transform-origin: left; animation: grow-x 800ms var(--ease-out) both; }
+@keyframes grow-x { from { transform: scaleX(0); } }
+.zone-legend { justify-content: center; }
+.w-summary { font-size: 1rem; line-height: 1.5; color: var(--text); margin-top: -8px; }
+.wchart .wline { animation: fade 700ms var(--ease) both; }
+
+.bio-bar { position: relative; flex: 0 0 30%; height: 8px; border-radius: 4px; background: var(--raised); }
+.bio-bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.bio-bar b { position: absolute; left: calc(50% - 0.5px); top: -3px; bottom: -3px; width: 1px; background: var(--text-3); }
+@media (max-width: 720px) { .bio-bar { flex-basis: 26%; } }
+.live[data-anim="bioAge"] svg { animation-name: flip; animation-duration: 6s; }
+@keyframes flip { 0%, 42% { transform: rotate(0deg); } 50%, 92% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
+
+.hr-detail { display: flex; flex-direction: column; gap: 12px; }
+.hr-zoom { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--r-lg); background: var(--card-2); border: 1px solid var(--line); }
+.hr-zoom .panel-title b { font-size: 1.375rem; }
+.hours-toggle { border-top: 1px solid var(--line); padding-top: 4px; }
+.hours-toggle summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-2);
+  -webkit-tap-highlight-color: transparent;
+}
+.hours-toggle summary::-webkit-details-marker { display: none; }
+.hours-toggle .when-open { display: none; }
+.hours-toggle:not([open]) .hours { display: none; }
+.hours-toggle[open] summary > span:first-child { display: none; }
+.hours-toggle[open] .when-open { display: inline; }
+.toggle-chev { margin-left: auto; width: 18px; height: 18px; color: var(--text-3); transition: transform 300ms var(--settle); }
+.hours-toggle[open] .toggle-chev { transform: rotate(90deg); }
+.hours-toggle[open] .hours { animation: hours-in 320ms var(--ease-out); }
+@keyframes hours-in { from { opacity: 0; transform: translateY(-6px); } }
+.hours { display: flex; flex-direction: column; }
+.hour-row { display: grid; grid-template-columns: 52px 1fr 110px; align-items: center; gap: 10px; min-height: 40px; padding: 4px 6px; border-radius: var(--r-md); text-align: left; }
+.hour-row.on { background: var(--raised); }
+.hour-row:active { background: var(--raised); }
+.hour-time { font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 0.875rem; }
+.hour-bar { position: relative; height: 8px; border-radius: 4px; background: var(--raised); }
+.hour-bar i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: color-mix(in srgb, var(--heart) 55%, transparent); }
+.hour-bar b { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--text); }
+.hour-num { text-align: right; font-size: 0.8125rem; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.hour-num b { color: var(--text); font-size: 0.9375rem; margin-right: 4px; }
+
+.cmps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cmp { display: grid; gap: 2px; padding: 12px 14px; border-radius: var(--r-md); background: var(--card-2); border: 1px solid var(--line); }
+.cmp span { font-size: 0.8125rem; color: var(--text-3); }
+.cmp b { font-size: 1.125rem; }
+.cmp em { font-style: normal; font-size: 0.8125rem; color: var(--text-2); }
+
+@media (max-width: 720px) {
+  .w-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .w-stat.accent { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .w-stat.accent .w-stat-value { font-size: 2.5rem; }
+  .w-stat-value { font-size: 1.375rem; }
+}
 
 /* ---------- Charts ---------- */
 .chart { overflow: visible; }
@@ -497,7 +597,8 @@ a.card:hover .chev { opacity: 1; transform: none; }
 
 .hit { fill: transparent; cursor: pointer; outline: none; }
 .hover-mark { opacity: 0; transition: opacity 120ms; pointer-events: none; }
-.hit:hover + .hover-mark { opacity: 1; }
+/* Hover only for real pointers: touch screens keep :hover stuck after a tap. */
+@media (hover: hover) { .hit:hover + .hover-mark { opacity: 1; } }
 
 .bar-mark, .stage-mark { transform-box: fill-box; transform-origin: bottom; }
 .dot { transform-box: fill-box; transform-origin: center; }
@@ -553,7 +654,7 @@ a.card:hover .chev { opacity: 1; transform: none; }
   transition: color 160ms, background-color 160ms;
 }
 .back:hover { color: var(--text); background: var(--raised); }
-.back svg, .back .lucide { width: 18px; height: 18px; }
+.back svg, .back .ph { width: 18px; height: 18px; }
 .detail-title {
   display: flex;
   align-items: center;
@@ -565,7 +666,7 @@ a.card:hover .chev { opacity: 1; transform: none; }
   text-transform: uppercase;
 }
 .detail-title .glyph { width: 40px; height: 40px; border-radius: 12px; }
-.detail-title .glyph .lucide { width: 20px; height: 20px; }
+.detail-title .glyph .ph { width: 20px; height: 20px; }
 
 .controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .segmented {
@@ -650,6 +751,149 @@ a.icon-btn[aria-disabled="true"] { opacity: 0.25; pointer-events: none; }
   text-align: center;
 }
 
+/* ---------- Text wrapping ---------- */
+h1, h2, .row-title, .workout-name { text-wrap: balance; }
+p, .note { text-wrap: pretty; }
+
+/* ---------- Grain: a faint noise layer so large dark surfaces aren't flat ---------- */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- Dial layout ---------- */
+.dial-foot { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
+.dial-sub { margin-top: 0; }
+
+/* ---------- Segmented short labels ---------- */
+.segmented .short { display: none; }
+
+/* ---------- Motion: springy presses, arcs and pops ---------- */
+:root { --bounce: cubic-bezier(0.34, 1.8, 0.5, 1); --settle: cubic-bezier(0.34, 1.32, 0.5, 1); }
+
+/* Everything tappable squashes slightly and springs back. */
+a.card, .dial, .wday, .chip, .tab, .back, .icon-btn, .date-btn, .segmented a, .stat, .m-btn {
+  transition: transform 520ms var(--bounce), background-color 200ms var(--ease), border-color 200ms var(--ease), color 160ms var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+a.card:active, .dial:active, .wday:active, a.chip:active, .tab:active, .back:active,
+.icon-btn:active:not(:disabled), .date-btn:active, .segmented a:active, .m-btn:active:not(:disabled) {
+  transform: scale(0.94);
+  transition-duration: 90ms;
+}
+
+/* Rings overshoot a touch and settle. */
+.dial-arc { transition: stroke-dashoffset 1500ms var(--settle); }
+.wday-ring .arc { transition: stroke-dashoffset 1100ms var(--settle); }
+.first-load .dial.reveal.in .dial-ring { animation: ring-pop 760ms var(--bounce) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes ring-pop { from { transform: scale(0.82); } to { transform: scale(1); } }
+.first-load .dial.reveal.in .dial-value { animation: value-pop 640ms var(--bounce) both; animation-delay: calc(240ms + var(--i, 0) * 70ms); }
+@keyframes value-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+
+.reveal.in { transition: opacity 560ms var(--ease-out), transform 700ms var(--settle); transition-delay: calc(var(--i, 0) * 50ms); }
+.reveal { transform: translateY(18px) scale(0.98); }
+
+.wday.bounce { animation: day-bounce 560ms var(--bounce); }
+@keyframes day-bounce { 0% { transform: scale(0.86); } 100% { transform: scale(1); } }
+
+.page.enter-detail { animation: enter-detail 520ms var(--settle) both; }
+
+.reveal.in.instant { transition: none; }
+
+/* ---------- Page transitions (View Transitions API) ---------- */
+.bar { view-transition-name: topbar; }
+.tabbar { view-transition-name: tabbar; }
+::view-transition-group(root) { animation-duration: 300ms; }
+::view-transition-old(root), ::view-transition-new(root) {
+  animation-duration: 300ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  animation-fill-mode: both;
+}
+::view-transition-old(root) { animation-name: vt-fade-out; }
+::view-transition-new(root) { animation-name: vt-fade-in; }
+html[data-nav="forward"]::view-transition-old(root) { animation-name: vt-out-left; }
+html[data-nav="forward"]::view-transition-new(root) { animation-name: vt-in-right; }
+html[data-nav="back"]::view-transition-old(root) { animation-name: vt-out-right; }
+html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-left; }
+::view-transition-old(topbar), ::view-transition-new(topbar),
+::view-transition-old(tabbar), ::view-transition-new(tabbar) { animation-duration: 200ms; }
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+@keyframes vt-out-left { to { opacity: 0; transform: translateX(-28px); } }
+@keyframes vt-in-right { from { opacity: 0; transform: translateX(36px); } }
+@keyframes vt-out-right { to { opacity: 0; transform: translateX(28px); } }
+@keyframes vt-in-left { from { opacity: 0; transform: translateX(-36px); } }
+
+/* ---------- Living icons ---------- */
+.live svg { transform-box: fill-box; transform-origin: center; animation-timing-function: ease-in-out; animation-iteration-count: infinite; will-change: transform; }
+.live[data-anim="hr"] svg, .live[data-anim="rhr"] svg { animation-name: heartbeat; animation-duration: var(--beat, 1s); animation-timing-function: linear; }
+@keyframes heartbeat { 0%, 100% { transform: scale(1); } 12% { transform: scale(1.24); } 24% { transform: scale(0.98); } 36% { transform: scale(1.14); } 55% { transform: scale(1); } }
+.live[data-anim="hrv"] svg { animation-name: wave; animation-duration: 1.8s; }
+@keyframes wave { 0%, 100% { transform: scaleY(1); } 30% { transform: scaleY(0.62); } 60% { transform: scaleY(1.18); } }
+.live[data-anim="resp"] svg { animation-name: breathe; animation-duration: var(--breath, 4s); }
+@keyframes breathe { 0%, 100% { transform: translateX(-1.5px) scale(0.9); opacity: 0.75; } 50% { transform: translateX(1.5px) scale(1.06); opacity: 1; } }
+.live[data-anim="sleep"] svg, .live[data-anim="sleepScore"] svg { animation-name: rock; animation-duration: 4.5s; }
+@keyframes rock { 0%, 100% { transform: rotate(-12deg); } 50% { transform: rotate(8deg) translateY(-1px); } }
+.live[data-anim="efficiency"] svg { animation-name: needle; animation-duration: 3.2s; }
+@keyframes needle { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg); } }
+.live[data-anim="energy"] svg { animation-name: flicker; animation-duration: 1.4s; transform-origin: 50% 100%; }
+@keyframes flicker { 0%, 100% { transform: scale(1, 1) skewX(0deg); } 25% { transform: scale(0.94, 1.1) skewX(-4deg); } 50% { transform: scale(1.04, 0.95) skewX(3deg); } 75% { transform: scale(0.97, 1.06) skewX(-2deg); } }
+.live[data-anim="steps"] svg { animation-name: step; animation-duration: 1.1s; }
+@keyframes step { 0%, 100% { transform: translate(-1px, 1px) rotate(-6deg); } 50% { transform: translate(1px, -1px) rotate(6deg); } }
+.live[data-anim="strain"] svg { animation-name: zap; animation-duration: 2.8s; }
+@keyframes zap { 0%, 70%, 100% { transform: scale(1); } 76% { transform: scale(1.25) rotate(-8deg); } 84% { transform: scale(0.95); } }
+.live[data-anim="zones"] svg { animation-name: wave; animation-duration: 1.2s; }
+.live[data-anim="temp"] svg { animation-name: rise; animation-duration: 3s; }
+@keyframes rise { 0%, 100% { transform: translateY(1px); } 50% { transform: translateY(-1.5px); } }
+.live[data-anim="spo2"] svg { animation-name: drip; animation-duration: 2.6s; transform-origin: 50% 0; }
+@keyframes drip { 0%, 60%, 100% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(1.5px) scale(0.92, 1.1); } 45% { transform: translateY(-0.5px) scale(1.05, 0.95); } }
+.live[data-anim="vo2"] svg { animation-name: rise; animation-duration: 4s; }
+.live[data-anim="stress"] svg { animation-name: pulse; animation-duration: 3s; }
+@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.85; } 50% { transform: scale(1.1); opacity: 1; } }
+.live[data-anim="recovery"] svg { animation-name: pulse; animation-duration: 2.2s; }
+.live[data-anim="sparkles"] svg { animation-name: twinkle; animation-duration: 3.4s; }
+@keyframes twinkle { 0%, 100% { transform: rotate(0deg) scale(1); } 40% { transform: rotate(12deg) scale(1.15); } 60% { transform: rotate(-6deg) scale(0.95); } }
+
+/* ---------- Tab bar (phones) ---------- */
+.tabbar {
+  display: none;
+  position: fixed;
+  z-index: 30;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  grid-template-columns: repeat(5, 1fr);
+  padding: 6px;
+  border-radius: 24px;
+  background: rgba(20, 21, 25, 0.78);
+  backdrop-filter: saturate(170%) blur(22px);
+  -webkit-backdrop-filter: saturate(170%) blur(22px);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+.tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 0 6px;
+  border-radius: 18px;
+  color: var(--text-3);
+}
+.tab-icon { display: grid; place-items: center; width: 44px; height: 26px; border-radius: var(--pill); transition: background-color 260ms var(--ease); }
+.tab-icon .ph { width: 20px; height: 20px; }
+.tab-label { font-family: var(--font-label); font-weight: 600; font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.tab.on { color: var(--text); }
+.tab.on .tab-icon { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+.tab.pop .tab-icon { animation: tab-pop 620ms var(--bounce); }
+@keyframes tab-pop { 0% { transform: scale(0.7) translateY(3px); } 100% { transform: scale(1) translateY(0); } }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 980px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -659,30 +903,145 @@ a.icon-btn[aria-disabled="true"] { opacity: 0.25; pointer-events: none; }
 @media (max-width: 720px) {
   :root { --gutter: 14px; }
   body { font-size: 14.5px; }
-  .bar-inner { grid-template-columns: auto 1fr; }
+  .page { gap: 20px; padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+  .foot { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+
+  /* Header: compact, three columns (brand, date, account/sync) */
+  .bar-inner { grid-template-columns: auto 1fr auto; padding: 8px var(--gutter); gap: 8px; }
   .brand span { display: none; }
-  .date-nav { justify-self: center; }
+  .date-nav { justify-self: center; padding: 2px; }
+  .date-nav .icon-btn { width: 32px; height: 32px; }
+  .date-btn { min-width: 0; height: 32px; padding: 0 8px; font-size: 0.9375rem; }
   .avatar { display: none; }
-  .page { gap: 22px; }
-  .dials { gap: 8px; }
-  .dial { padding: 16px 6px 14px; gap: 10px; border-radius: 20px; }
-  .dial-value { font-size: 1.75rem; }
-  .dial-name { font-size: 0.8125rem; letter-spacing: 0.12em; }
-  .dial-sub { font-size: 0.75rem; margin-top: 4px; }
-  .dial .tag { display: none; }
-  .wday { padding: 8px 0 10px; }
-  .insight { grid-template-columns: 1fr; padding: 18px; }
-  .insight h1 { font-size: 1.1875rem; }
-  .card { min-height: 156px; padding: 14px 14px 10px; border-radius: 18px; }
-  .card-value { font-size: 1.625rem; }
+
+  /* Day strip */
+  .week { --gap: 2px; }
+  .wday { padding: 8px 0 10px; gap: 4px; border-radius: 14px; }
+  .wday .label { font-size: 0.6875rem; letter-spacing: 0.1em; }
+  .wday-num { font-size: 1rem; }
+  .wday-ring { width: 22px; height: 22px; }
+
+  /* Dials: recovery as the hero, sleep and strain side by side below it */
+  .dials { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .dial { padding: 18px 10px 16px; gap: 10px; border-radius: 22px; }
+  .dial .dial-ring { width: min(132px, 100%); }
+  .dial-value { font-size: 2rem; }
+  .dial-name { font-size: 0.8125rem; letter-spacing: 0.14em; }
+  .dial-sub { font-size: 0.75rem; }
+  .dial .tag { top: 10px; right: 10px; font-size: 0.6875rem; padding: 1px 6px; }
+  .dial.hero { grid-column: 1 / -1; order: -1; padding: 22px 16px 18px; gap: 12px; }
+  .dial.hero .dial-ring { width: min(212px, 64vw); }
+  .dial.hero .dial-value { font-size: 3.6rem; }
+  .dial.hero .dial-name { font-size: 1rem; letter-spacing: 0.2em; }
+  .dial.hero .dial-sub { font-size: 0.875rem; }
+
+  /* Insight */
+  .insight { display: block; position: relative; padding: 18px 18px 16px; border-radius: 22px; }
+  .insight-icon { position: absolute; top: 14px; right: 14px; width: 32px; height: 32px; border-radius: 10px; }
+  .insight-icon .ph { width: 17px; height: 17px; }
+  .insight-date { display: block; padding-right: 44px; font-size: 0.75rem; }
+  .insight h1 { font-size: 1.1875rem; margin-top: 8px; }
+  .insight p { font-size: 0.9375rem; line-height: 1.5; }
+  .insight .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 14px -18px 0;
+    padding: 0 18px 2px;
+    mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+  }
+  .insight .chips::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; padding: 7px 12px; }
+
+  /* Sections and cards */
+  .section-head h2 { font-size: 1rem; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .card { min-height: 150px; padding: 14px 14px 10px; border-radius: 20px; }
+  .card-value { font-size: 1.625rem; margin-top: 8px; }
+  .card-value .u { font-size: 0.8125rem; }
   .card-label { font-size: 0.8125rem; }
+  .card .glyph { width: 26px; height: 26px; border-radius: 8px; }
+  .delta { font-size: 0.75rem; }
   .chev { display: none; }
-  .panel { padding: 16px 14px 18px; border-radius: 20px; }
-  .controls { flex-direction: column; align-items: stretch; }
+  .wide .legend { gap: 4px 10px; font-size: 0.75rem; }
+  .panel { padding: 16px 14px 18px; border-radius: 22px; gap: 14px; }
+  .panel-title b { font-size: 1.5rem; }
+  .legend { font-size: 0.75rem; gap: 4px 12px; }
+  .full .workout { padding: 10px 12px; }
+
+  /* Detail page: back button and title on one row */
+  .detail-head { flex-direction: row; align-items: center; gap: 12px; }
+  .back { width: 38px; height: 38px; padding: 0; justify-content: center; flex-shrink: 0; }
+  .back span { display: none; }
+  .detail-title { font-size: 1.375rem; letter-spacing: 0.04em; gap: 10px; line-height: 1.1; min-width: 0; }
+  .detail-title .glyph { width: 34px; height: 34px; border-radius: 10px; }
+  .detail-title .glyph .ph { width: 18px; height: 18px; }
+  .controls { flex-direction: column; align-items: stretch; gap: 10px; }
+  .segmented a { padding: 8px 2px; font-size: 0.875rem; letter-spacing: 0.06em; }
+  .segmented .long { display: none; }
+  .segmented .short { display: inline; }
   .period { justify-content: space-between; }
+  .period-label { min-width: 0; font-size: 0.9375rem; }
+  .headline { gap: 6px; }
   .headline-value { font-size: 2.5rem; }
+  .headline-value .u { font-size: 1rem; }
+  .headline-note { font-size: 0.875rem; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat { padding: 12px 14px; }
+  .stat-value { font-size: 1.1875rem; }
+  .row { gap: 10px; }
   .row-meter { display: none; }
-  .detail-title { font-size: 1.5rem; }
+  .row-val { width: auto; }
+  .chart text { font-size: 11px; }
+
+  /* Bottom tab bar */
+  .tabbar { display: grid; }
+
+  /* Touch targets: 44pt minimum (iOS HIG; ui-ux-pro-max touch rules) */
+  .date-nav { padding: 2px; }
+  .date-nav .icon-btn { width: 44px; height: 44px; }
+  .date-btn { height: 44px; }
+  .brand { min-width: 44px; min-height: 44px; justify-content: center; }
+  .back { width: 44px; height: 44px; }
+  .period .icon-btn { width: 44px; height: 44px; }
+  .chip { min-height: 40px; }
+  .segmented a { padding: 11px 2px; }
+
+  /* Type: one level of condensed capitals (section heads, dial names, page
+     titles); smaller labels in sentence case, nothing under 12px. */
+  .card-label {
+    font-family: var(--font);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-2);
+  }
+  .tab-label { font-family: var(--font); font-size: 0.75rem; letter-spacing: 0; text-transform: none; font-weight: 600; }
+  .wday .label { font-size: 0.75rem; }
+  .tag, .dial .tag { font-size: 0.75rem; }
+  .insight-date { font-family: var(--font); text-transform: none; letter-spacing: 0; font-size: 0.8125rem; font-weight: 500; }
+  .stat-label, .headline-label {
+    font-family: var(--font);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+  .chart text { font-size: 12px; }
+  .stat-value .u { font-size: 0.75em; font-weight: 600; color: var(--text-2); margin-left: 3px; }
+
+  /* Performance on phones: no filters or full-screen overlays that repaint
+     while rings sweep, pages slide or the list scrolls. */
+  .dial-arc { filter: none; }
+  body::after { display: none; }
+  .bar { background: rgba(5, 5, 6, 0.94); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .tabbar { background: #16171B; backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* iPhones composite blur cheaply; keep the frosted tab bar there (html.ios is set by mobile.js). */
+@media (max-width: 720px) {
+  html.ios .tabbar { background: rgba(20, 21, 25, 0.78); -webkit-backdrop-filter: saturate(170%) blur(22px); backdrop-filter: saturate(170%) blur(22px); }
 }
 
 @media (max-width: 380px) {
@@ -694,4 +1053,71 @@ a.icon-btn[aria-disabled="true"] { opacity: 0.25; pointer-events: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .reveal { opacity: 1; transform: none; }
   .animate .draw { stroke-dashoffset: 0; }
+}
+
+/* Heart page spacing: the chart card ends in the breakdown toggle (which has
+   its own 44px tap height), and the zones card and stat tiles below are one
+   group that needs the page's usual gap between them. */
+.panel:has(> .hr-detail) { padding-bottom: 6px; }
+.hr-extra { display: flex; flex-direction: column; gap: 28px; }
+@media (max-width: 720px) { .hr-extra { gap: 20px; } }
+
+/* Heart day chart scrubber: horizontal slides scrub, vertical ones scroll. */
+.day-scrub { fill: transparent; cursor: crosshair; touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.scrub-mark { pointer-events: none; }
+.scrub-mark line { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 2 3; }
+.scrub-mark circle { fill: var(--heart); stroke: var(--card); stroke-width: 2; }
+.scrub-mark[hidden] { display: none; }
+/* touch-action on an SVG shape isn't honoured; it has to be on the <svg>. */
+.chart:has(.day-scrub) { touch-action: pan-y; }
+
+/* Chart scrubbing (touch): horizontal slides scrub, vertical ones scroll. */
+.chart:has(.hit) { touch-action: pan-y; }
+.hover-mark.on { opacity: 1; }
+
+/* ---------- Concentric rings: recovery (outer), sleep, strain (inner) ---------- */
+.rings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  border-radius: 26px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.rings-art { width: min(280px, 100%); aspect-ratio: 1; justify-self: center; }
+.rings-art svg { width: 100%; height: 100%; overflow: visible; }
+.first-load .rings.reveal.in .rings-art { animation: ring-pop 760ms var(--bounce) both; }
+.rings-legend { display: flex; flex-direction: column; gap: 6px; }
+.ring-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px 12px; margin: 0 -12px; border-radius: 16px;
+  transition: transform 520ms var(--bounce), background-color 200ms var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.ring-row:hover { background: var(--card-2); }
+.ring-row:active { transform: scale(0.96); transition-duration: 90ms; }
+.ring-dot { width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: var(--c); flex: none; }
+.ring-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ring-name { color: var(--c); letter-spacing: 0.16em; display: flex; align-items: center; gap: 6px; }
+.ring-name .tag { font-size: 0.625rem; padding: 0 5px; letter-spacing: 0.04em; }
+.ring-value { font-size: 2rem; font-weight: 700; line-height: 1.05; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.ring-value small { font-size: 0.45em; font-weight: 600; color: var(--text-2); margin-left: 2px; letter-spacing: 0; }
+.ring-value.none { color: var(--text-3); }
+.ring-sub { font-size: 0.8125rem; color: var(--text-2); }
+@media (max-width: 720px) {
+  .rings { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 12px; padding: 18px 14px 18px 12px; border-radius: 22px; }
+  .ring-row { padding: 6px 10px; margin: 0 -10px; gap: 10px; }
+  .ring-value { font-size: 1.625rem; }
+  .ring-sub { font-size: 0.75rem; }
+  .ring-name { font-size: 0.75rem; }
+}
+/* Rings fill their half of the card; the legend tightens to the rings' height. */
+.rings-art { width: 100%; max-width: 320px; }
+@media (max-width: 720px) {
+  .rings { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; padding: 16px 12px 16px 14px; }
+  .rings-legend { gap: 2px; }
+  .ring-row { padding: 5px 8px; margin: 0 -8px; }
+  .ring-value { font-size: 1.5rem; }
 }

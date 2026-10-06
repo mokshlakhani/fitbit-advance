@@ -56,8 +56,10 @@ def dashboard_profile():
         'height_cm': h,
         'weight_kg': w,
         'bmi': round(w / ((h / 100.0) ** 2), 2) if h and w else None,
-        # Tanaka formula; 190 bpm if age is unknown.
+        # Tanaka formula; 190 bpm if age is unknown. Used for strain.
         'max_hr': round(208 - 0.7 * age) if age else 190,
+        # Heart-rate zones use Fitbit's 220 - age, so they match the Fitbit app.
+        'zone_max_hr': 220 - age if age else 190,
         'timezone': timezone_name(),
         'temperature_unit': p.get('temperature_unit') or 'CELSIUS',
     }

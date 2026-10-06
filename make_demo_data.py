@@ -17,7 +17,7 @@ import numpy as np
 import process_fitbit_openstrap as pipeline
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DAYS = 90
+DAYS = 120  # enough history for body age's pace (90+ days)
 rng = np.random.default_rng(7)
 
 PROFILE = {
@@ -63,14 +63,15 @@ def sleep_night(wake_day, fatigue):
     }, bed, t
 
 
-def main():
-    end = date.today()
+def build_src(days=DAYS, end=None):
+    """Synthetic per-day sources, in the shape assemble() takes."""
+    end = end or date.today()
     src = {k: {} for k in ('hrv', 'sleep', 'temp', 'spo2', 'vo2', 'steps', 'cal', 'hourly_steps',
                            'hourly_cals', 'resp', 'rhr', 'intraday_hr', 'workouts')}
     fatigue = 0.0
     vo2 = 46.0
-    for i in range(DAYS):
-        day = end - timedelta(days=DAYS - 1 - i)
+    for i in range(days):
+        day = end - timedelta(days=days - 1 - i)
         iso = day.isoformat()
         # Fatigue builds with hard days and fades with rest; vitals follow it.
         fatigue = clamp(fatigue * 0.6 + rng.normal(0.25, 0.35), 0, 1.5)
@@ -124,8 +125,11 @@ def main():
         src['hourly_cals'][iso] = [round(c) for c in cals]
         src['steps'][iso] = sum(steps)
         src['cal'][iso] = round(sum(cals))
+    return src
 
-    output = pipeline.assemble(src, PROFILE, os.path.join(HERE, 'no_labels.csv'))
+
+def main():
+    output = pipeline.assemble(build_src(), PROFILE, os.path.join(HERE, 'no_labels.csv'))
     output['demo'] = True
     with open(os.path.join(HERE, 'demo_data.json'), 'w') as fh:
         json.dump(output, fh, separators=(',', ':'))
