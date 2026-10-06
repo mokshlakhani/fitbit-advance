@@ -96,6 +96,36 @@ export function trimpAndStrain(minuteHr, restingHr, maxHr = 190, sex = null, zon
   return [pyRound(trimp, 1), strain, pct];
 }
 
+// See asleep_minutes in process_fitbit_openstrap.py. Times are local wall
+// clock, so they're handled as UTC to keep the arithmetic free of DST.
+export function asleepMinutes(dt, sleepOf) {
+  const next = new Date(Date.parse(`${dt}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  const out = new Set();
+  for (const entry of [sleepOf(dt), sleepOf(next)]) {
+    if (!entry || !entry.startTime || !entry.timeInBed) continue;
+    const start = Date.parse(`${entry.startTime.slice(0, 16)}:00Z`);
+    for (let m = 0; m < Math.trunc(entry.timeInBed); m++) {
+      const iso = new Date(start + m * 60000).toISOString();
+      if (iso.slice(0, 10) === dt) out.add(iso.slice(11, 16));
+    }
+  }
+  return out;
+}
+
+// See awake_zone_minutes in process_fitbit_openstrap.py.
+export function awakeZoneMinutes(minuteHr, restingHr, maxHr = 190, zoneMaxHr = null, asleep = new Set()) {
+  if (!minuteHr.length) return null;
+  const zones = { light: 0, moderate: 0, vigorous: 0, peak: 0 };
+  const zoneReserve = restingHr != null ? Math.max((zoneMaxHr || maxHr) - restingHr, 1) : null;
+  for (const pt of minuteHr) {
+    if (asleep.has(pt.time)) continue;
+    const hr = pt.bpm;
+    if (zoneReserve === null || hr <= restingHr) zones.light += 1;
+    else zones[hrZone(Math.min(1.0, (hr - restingHr) / zoneReserve))] += 1;
+  }
+  return zones;
+}
+
 // ---------- Workouts (see analyse_workout in process_fitbit_openstrap.py) ----------
 export const WORKOUT_TAIL_S = 150;
 const MAX_SAMPLE_GAP_S = 10;
@@ -422,7 +452,7 @@ export function assemble(src, profile, labels, { today } = {}) {
         steps,
         calories: cals,
         zones,
-        zone_minutes: minuteHr.length ? Object.fromEntries(Object.entries(zones).map(([k, v]) => [k, pyInt(v / 100 * minuteHr.length)])) : null,
+        zone_minutes: awakeZoneMinutes(minuteHr, rhr, profile.max_hr, profile.zone_max_hr, asleepMinutes(dt, d => get('sleep', d))),
         workouts: dayWorkouts,
         intraday_hr: spark,
         hr_stats: minuteHr.length ? (() => {

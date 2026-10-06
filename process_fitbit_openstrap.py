@@ -472,6 +472,40 @@ def calculate_trimp_and_strain(minute_hr_series, resting_hr, max_hr=190, sex=Non
     return round(trimp, 1), strain, zone_pct
 
 
+def asleep_minutes(dt, sleep_data):
+    """The day's 'HH:MM' minutes covered by a main sleep: the night that ends on
+    dt and the one that starts on dt's evening (it belongs to the next date)."""
+    nxt = (datetime.strptime(dt, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+    out = set()
+    for entry in (sleep_data.get(dt), sleep_data.get(nxt)):
+        if not entry or not entry.get('startTime') or not entry.get('timeInBed'):
+            continue
+        start = datetime.strptime(entry['startTime'][:16], '%Y-%m-%dT%H:%M')
+        for m in range(int(entry['timeInBed'])):
+            t = start + timedelta(minutes=m)
+            if t.strftime('%Y-%m-%d') == dt:
+                out.add(t.strftime('%H:%M'))
+    return out
+
+
+def awake_zone_minutes(minute_hr, resting_hr, max_hr=190, zone_max_hr=None, asleep=frozenset()):
+    """Minutes in each heart-rate zone while awake. Sleep would otherwise fill
+    the light zone with seven-odd hours that aren't activity."""
+    if not minute_hr:
+        return None
+    zones = {'light': 0, 'moderate': 0, 'vigorous': 0, 'peak': 0}
+    zone_reserve = max((zone_max_hr or max_hr) - resting_hr, 1) if resting_hr is not None else None
+    for pt in minute_hr:
+        if pt['time'] in asleep:
+            continue
+        hr = pt['bpm']
+        if zone_reserve is None or hr <= resting_hr:
+            zones['light'] += 1
+        else:
+            zones[hr_zone(min(1.0, (hr - resting_hr) / zone_reserve))] += 1
+    return zones
+
+
 # ---------- Workouts ----------
 WORKOUT_TAIL_S = 150   # samples kept after a workout ends, for heart-rate recovery
 MAX_SAMPLE_GAP_S = 10  # a reading counts for at most this long (gaps aren't filled)
@@ -886,7 +920,7 @@ def assemble(src, profile, labels_path):
                 'steps': steps,
                 'calories': cals,
                 'zones': hr_zones,
-                'zone_minutes': {k: round(v / 100 * len(minute_hr)) for k, v in hr_zones.items()} if minute_hr else None,
+                'zone_minutes': awake_zone_minutes(minute_hr, rhr, profile['max_hr'], profile.get('zone_max_hr'), asleep_minutes(dt, sleep_data)),
                 'workouts': day_workouts,
                 'intraday_hr': intraday_spark,
                 # From the per-minute averages, not the 10-minute sparkline above.

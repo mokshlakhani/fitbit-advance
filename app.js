@@ -1344,7 +1344,7 @@ function detailDay(key, color) {
     // Strain and zone minutes: time in each heart-rate zone, no heart-rate line
     // (that lives on the Heart page).
     const z = d.strain.zone_minutes;
-    if (z) chart = `<div class="panel-title"><span class="label">Time in each zone</span></div>${zoneBars(z, d.cardiovascular.rhr, state.data.profile.zone_max_hr || state.data.profile.max_hr)}`;
+    if (z) chart = `<div class="panel-title"><span class="label">Time in each zone · awake</span></div>${zoneBars(z, d.cardiovascular.rhr, state.data.profile.zone_max_hr || state.data.profile.max_hr)}`;
   } else if (m.intraday === 'hr') {
     const hr = d.strain.intraday_hr || [];
     if (hr.length) {
@@ -1579,14 +1579,26 @@ function placeStrip(root) {
   if (!strip) return;
   const sel = strip.querySelector('[aria-current="date"]');
   if (!sel) return;
-  const target = sel.offsetLeft - (strip.clientWidth - sel.offsetWidth) / 2;
-  if (stripScroll === null) strip.scrollLeft = target;
-  else {
-    strip.scrollLeft = stripScroll;
-    requestAnimationFrame(() => strip.scrollTo({ left: target, behavior: reducedMotion ? 'auto' : 'smooth' }));
-  }
-  stripScroll = target;
-  strip.addEventListener('scroll', () => { stripScroll = strip.scrollLeft; }, { passive: true });
+  // Waits for layout: iOS Safari can drop a scroll position set before the
+  // strip has a width, which left it at the start of history after a refresh.
+  const place = () => {
+    if (!strip.isConnected) return;
+    if (!strip.clientWidth) { requestAnimationFrame(place); return; }
+    // Measured against the strip itself (offsetLeft is relative to the page).
+    const target = strip.scrollLeft + sel.getBoundingClientRect().left - strip.getBoundingClientRect().left
+      - (strip.clientWidth - sel.offsetWidth) / 2;
+    if (stripScroll === null || Math.abs(stripScroll - target) < 1) {
+      strip.scrollLeft = target;
+      requestAnimationFrame(() => { if (Math.abs(strip.scrollLeft - target) > 1) strip.scrollLeft = target; });
+    } else {
+      strip.scrollLeft = stripScroll;
+      requestAnimationFrame(() => strip.scrollTo({ left: target, behavior: reducedMotion ? 'auto' : 'smooth' }));
+    }
+    stripScroll = target;
+    // A strip being replaced can report a last scroll of 0; only the live one counts.
+    strip.addEventListener('scroll', () => { if (strip.isConnected) stripScroll = strip.scrollLeft; }, { passive: true });
+  };
+  place();
 }
 
 // ---------- Heart rate: every reading, loaded on demand ----------

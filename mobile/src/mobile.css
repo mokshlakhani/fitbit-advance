@@ -149,3 +149,7 @@ body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none;
 .m-skeleton i { height: 140px; border-radius: 20px; background: linear-gradient(100deg, var(--card) 30%, var(--card-2) 50%, var(--card) 70%) 0 0 / 300% 100%; animation: m-shimmer 1.6s linear infinite; }
 .m-skeleton i:first-child { grid-column: 1 / -1; height: 220px; }
 @keyframes m-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* One-time sex question */
+.m-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+.m-skip { width: 100%; margin-top: 10px; }

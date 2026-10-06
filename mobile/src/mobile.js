@@ -16,7 +16,7 @@ const AUTO_SYNC_MS = 5 * 60 * 1000;
 const SILENT_REDIRECT_GAP_MS = 10 * 60 * 1000;
 // Bump when engine.js changes what it computes, so phones recompute instead of
 // showing a cached dashboard from the old version.
-const ENGINE_VERSION = 8;
+const ENGINE_VERSION = 9;
 
 const cap = window.Capacitor;
 const NATIVE = Boolean(cap?.isNativePlatform?.());
@@ -91,8 +91,43 @@ async function recomputeAndShow() {
   if (data) {
     document.body.classList.remove('m-empty');
     window.DataStrap.refresh(data);
+    askSexOnce();
   }
   return data;
+}
+
+// Google doesn't share sex, and strain (Banister TRIMP) and body age depend on
+// it, so ask once after the first data arrives. Skipping uses the average of
+// the men's and women's formulas; the sync sheet can change it later.
+let sexPromptShown = false;
+async function askSexOnce() {
+  if (sexPromptShown || (await profile()).sex || (await store.get('sexAsked'))) return;
+  sexPromptShown = true;
+  const el = document.createElement('div');
+  el.className = 'm-sheet';
+  el.innerHTML = `<div class="m-scrim"></div><div class="m-panel" role="dialog" aria-modal="true" aria-labelledby="sexTitle">
+    <div class="m-grab"></div><div class="m-body">
+      <h2 class="m-title" id="sexTitle">One question</h2>
+      <p class="m-note">Google doesn't share this. Strain and body age use different formulas for men and women, so they're more accurate when the app knows.</p>
+      <div class="m-pair"><button class="m-btn primary" data-sex="male">Male</button><button class="m-btn primary" data-sex="female">Female</button></div>
+      <button class="m-btn m-skip" data-sex="">Skip</button>
+      <p class="m-note">You can change this later under ↻.</p>
+    </div></div>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('open')));
+  el.addEventListener('click', async e => {
+    const b = e.target.closest('[data-sex]');
+    if (!b) return;
+    await store.set('sexAsked', true);
+    if (b.dataset.sex) {
+      const saved = (await store.get('profile')) || {};
+      saved.sex = b.dataset.sex;
+      await store.set('profile', saved);
+    }
+    el.classList.remove('open');
+    setTimeout(() => el.remove(), 260);
+    if (b.dataset.sex) await recomputeAndShow();
+  });
 }
 
 // ---------- Google sign-in ----------
@@ -139,12 +174,16 @@ async function refreshSilently() {
 }
 
 // ---------- Sync ----------
-async function runSync() {
+// `background`: the 5-minute timer. The web app's Google pass lasts an hour and
+// renewing it means a trip to Google and back, so a background sync never does
+// that mid-use; it waits for the next open, return to the app, or ↻.
+async function runSync({ background = false } = {}) {
   if (syncing) return syncing;
   syncing = (async () => {
     try {
       if (!(await store.get('signedIn'))) { setUi('signedOut'); return; }
       if (!NATIVE && !(await webauth.hasValidToken())) {
+        if (background) return;
         if (document.visibilityState === 'visible' && silentRefreshAllowed()) {
           setUi('syncing', 'Refreshing Google sign-in');
           await refreshSilently().catch(e => setUi('error', '', String(e.message || e)));
@@ -174,7 +213,9 @@ async function runSync() {
       else setUi('idle', '', '', '');
       runHistory(historyDays);
     } catch (err) {
-      if (err.code === 'NEEDS_REDIRECT' && silentRefreshAllowed() && document.visibilityState === 'visible') {
+      if (err.code === 'NEEDS_REDIRECT' && background) {
+        // Leave it for the next open, return or ↻.
+      } else if (err.code === 'NEEDS_REDIRECT' && silentRefreshAllowed() && document.visibilityState === 'visible') {
         await refreshSilently().catch(e => setUi('error', '', String(e.message || e)));
       } else if (['NEEDS_CONSENT', 'NEEDS_REDIRECT'].includes(err.code) || err.status === 401 || err.status === 403) {
         await store.set('signedIn', false);
@@ -528,6 +569,7 @@ window.DataStrapHost = {
       else showConnect(notice);
       return null;
     }
+    if (signedIn) setTimeout(askSexOnce, 800);
     return data;
   },
 };
@@ -536,7 +578,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') runSync();
 });
 setInterval(() => {
-  if (document.visibilityState === 'visible') runSync();
+  if (document.visibilityState === 'visible') runSync({ background: true });
 }, AUTO_SYNC_MS);
 
 // Android back button: close the sheet, then go back through the dashboard's pages.
