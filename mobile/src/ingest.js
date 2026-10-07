@@ -187,6 +187,14 @@ export function loadSleep(raw, tz) {
 
 const titleCase = s => s.toLowerCase().replace(/(^|[^a-z])([a-z])/g, (m, a, b) => a + b.toUpperCase());
 
+// Workouts logged from DataStrap (see is_datastrap in google_health_sync.py).
+export const DATASTRAP_PROJECT = '724732375940-';
+export const DATASTRAP_PACKAGE = 'app.datastrap.personal';
+export function isDatastrap(p) {
+  const app = p?.dataSource?.application || {};
+  return Object.values(app).some(v => typeof v === 'string' && (v.startsWith(DATASTRAP_PROJECT) || v === DATASTRAP_PACKAGE));
+}
+
 function fitbitZones(z) {
   if (!z) return null;
   return Object.fromEntries(['light', 'moderate', 'vigorous', 'peak'].map(k => [k, pyRound(Number(String(z[`${k}Time`] ?? '0s').replace(/s$/, '') || 0) / 60.0, 1)]));
@@ -212,6 +220,8 @@ export function loadWorkouts(raw, tz) {
       elevation_m: m.elevationGainMillimeters ? pyInt(Number(m.elevationGainMillimeters) / 1000) : null,
       active_zone_minutes: m.activeZoneMinutes ? Math.trunc(Number(m.activeZoneMinutes)) : null,
       fitbit_zones: fitbitZones(m.heartRateZoneDurations),
+      id: p.name ?? null,
+      logged_in_app: isDatastrap(p),
     });
   }
   return out;

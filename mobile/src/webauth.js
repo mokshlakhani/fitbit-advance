@@ -18,6 +18,8 @@ const SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
   'https://www.googleapis.com/auth/googlehealth.settings.readonly',
 ];
+// Asked for only when someone first logs a workout (Log +).
+export const WRITE_SCOPE = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.writeonly';
 const EARLY_MS = 2 * 60 * 1000; // treat tokens as expired 2 minutes early
 
 let config = null;
@@ -37,7 +39,7 @@ function randomState() {
 }
 
 /** Send the page to Google. Resolves never (the page navigates away). */
-async function redirect({ silent }) {
+async function redirect({ silent, write = false }) {
   const id = await clientId();
   if (!id) throw Object.assign(new Error('This copy of DataStrap has no Google client ID set up (config.json).'), { code: 'NO_CLIENT' });
   const state = randomState();
@@ -47,7 +49,7 @@ async function redirect({ silent }) {
     client_id: id,
     redirect_uri: redirectUri(),
     response_type: 'token',
-    scope: SCOPES.join(' '),
+    scope: (write ? [...SCOPES, WRITE_SCOPE] : SCOPES).join(' '),
     include_granted_scopes: 'true',
     state,
   });
@@ -78,6 +80,7 @@ export async function completeRedirect() {
     token: p.get('access_token'),
     expires: Date.now() + Number(p.get('expires_in') || 3600) * 1000,
     missing,
+    canWrite: granted.includes(WRITE_SCOPE),
   });
   await store.set('webAuthError', null);
   return 'signed-in';
@@ -92,6 +95,14 @@ export async function getToken({ refresh = false } = {}) {
 }
 
 export const signIn = () => redirect({ silent: false });
+/** Adds permission to log workouts (leaves the page; comes back signed in). */
+export const signInToWrite = () => redirect({ silent: false, write: true });
+
+/** Whether the current token may log workouts. */
+export async function canWrite() {
+  const t = await store.get('webToken');
+  return Boolean(t && t.canWrite && t.expires - EARLY_MS > Date.now());
+}
 export const refreshSilently = () => redirect({ silent: true });
 
 export async function hasValidToken() {

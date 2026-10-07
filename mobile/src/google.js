@@ -2,7 +2,7 @@
 // Downloads into the IndexedDB store; nothing leaves the phone except the
 // requests to Google.
 import * as store from './store.js';
-import { minuteAggregateSeconds } from './ingest.js';
+import { minuteAggregateSeconds, isDatastrap } from './ingest.js';
 import { pyRound } from './engine.js';
 
 const API = 'https://health.googleapis.com/v4/users/me';
@@ -289,6 +289,18 @@ export async function sync({ getToken, phase = 'recent', days = 7, historyDays =
         const points = await api.list(type, filter);
         const merged = (await store.get(`points:${type}`)) || {};
         let changed = 0;
+        if (type === 'exercise') {
+          // The source filter leaves out workouts logged from apps, DataStrap's
+          // own included: fetch those separately, and drop ones deleted since.
+          const own = (await api.list(type, filter, { sources: false })).filter(isDatastrap);
+          const keep = new Set(own.map(pointKey));
+          const lo = bound(start, kind), hi = bound(end, kind);
+          for (const [k, p] of Object.entries(merged)) {
+            const civil = civilStart(p);
+            if (isDatastrap(p) && civil && civil >= lo && civil < hi && !keep.has(k)) { delete merged[k]; changed++; }
+          }
+          points.push(...own);
+        }
         for (const p of points) {
           const k = pointKey(p);
           if (JSON.stringify(merged[k]) !== JSON.stringify(p)) changed++;
@@ -323,6 +335,57 @@ export async function sync({ getToken, phase = 'recent', days = 7, historyDays =
     if (slowDue && !report.errors.length) await store.set('slowSyncAt', Date.now());
   }
   return report;
+}
+
+// A workout's local start, 'YYYY-MM-DDTHH:MM:SS' (what the API filters on).
+function civilStart(p) {
+  const iv = p.exercise?.interval;
+  if (!iv?.startTime) return null;
+  const off = parseInt(String(iv.startUtcOffset || '0s'), 10) || 0;
+  return new Date(Date.parse(iv.startTime) + off * 1000).toISOString().slice(0, 19);
+}
+
+// ---------- Logging workouts (Log +) ----------
+/**
+ * Writes a workout to Google Health (it appears in the Fitbit app too) and
+ * stores Google's copy, so it shows here straight away.
+ * `start` is the local start time as a Date; `utcOffsetS` the offset there.
+ */
+export async function logWorkout(getToken, { type, label, start, minutes, utcOffsetS, calories, distanceKm }) {
+  const api = new Api(getToken);
+  const end = new Date(start.getTime() + minutes * 60000);
+  const metrics = {};
+  if (calories > 0) metrics.caloriesKcal = calories;
+  if (distanceKm > 0) metrics.distanceMillimeters = Math.round(distanceKm * 1e6);
+  const res = await api.request('dataTypes/exercise/dataPoints', {
+    method: 'POST',
+    body: {
+      dataSource: { recordingMethod: 'MANUAL' },
+      exercise: {
+        interval: { startTime: rfc(start.getTime()), startUtcOffset: `${utcOffsetS}s`, endTime: rfc(end.getTime()), endUtcOffset: `${utcOffsetS}s` },
+        exerciseType: type,
+        displayName: label,
+        activeDuration: `${minutes * 60}s`,
+        ...(Object.keys(metrics).length ? { metricsSummary: metrics } : {}),
+      },
+    },
+  });
+  const point = res.response || res;
+  if (point?.name) {
+    const merged = (await store.get('points:exercise')) || {};
+    merged[point.name] = point;
+    await store.set('points:exercise', merged);
+  }
+  return point;
+}
+
+/** Deletes a workout this app logged, from Google and from the phone. */
+export async function deleteWorkout(getToken, name) {
+  const api = new Api(getToken);
+  await api.request('dataTypes/exercise/dataPoints:batchDelete', { method: 'POST', body: { names: [name] } });
+  const merged = (await store.get('points:exercise')) || {};
+  delete merged[name];
+  await store.set('points:exercise', merged);
 }
 
 /** Everything stored, in the shape ingest.loadApiSources reads. */

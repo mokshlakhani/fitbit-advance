@@ -19,6 +19,11 @@ NAMES = {
     'trending-up': 'trend-up', 'trophy': 'trophy', 'volleyball': 'soccer-ball', 'wind': 'wind', 'zap': 'lightning',
     'waves': 'waves', 'house': 'house', 'hourglass': 'hourglass-medium', 'refresh': 'arrows-clockwise',
     'run': 'person-simple-run', 'ping-pong': 'ping-pong', 'swim': 'swimming-pool',
+    # Log + (activity picker)
+    'plus': 'plus', 'x': 'x', 'search': 'magnifying-glass', 'trash': 'trash', 'check': 'check',
+    'walk': 'person-simple-walk', 'hike': 'person-simple-hike', 'yoga': 'person-simple-tai-chi',
+    'boxing': 'boxing-glove', 'tennis': 'tennis-ball', 'basketball': 'basketball', 'snow': 'snowflake',
+    'dance': 'music-notes', 'chores': 'broom', 'boat': 'boat', 'ski': 'person-simple-ski',
 }
 WEIGHTS = {'regular': '', 'duotone': '-duotone', 'fill': '-fill', 'bold': '-bold'}
 

@@ -251,14 +251,43 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
   gap: var(--gap);
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scroll-snap-type: x mandatory;
+  /* Glides freely and stays where it's left (no snapping), so days at the
+     edges can hold a partly fallen pose. */
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  /* fade the edges so it reads as scrollable */
-  mask-image: linear-gradient(90deg, transparent, #000 14px, #000 calc(100% - 14px), transparent);
 }
+/* Faded edges, so it reads as scrollable: fixed overlays on a wrapper rather
+   than a mask on the scroller, which repainted the whole strip every frame. */
+.week-wrap { position: relative; }
+.week-wrap::before, .week-wrap::after {
+  content: ''; position: absolute; top: 0; bottom: 0; width: 14px; z-index: 1; pointer-events: none;
+}
+.week-wrap::before { left: 0; background: linear-gradient(90deg, var(--bg), transparent); }
+.week-wrap::after { right: 0; background: linear-gradient(270deg, var(--bg), transparent); }
 .week::-webkit-scrollbar { display: none; }
-.week .wday { flex: 0 0 calc((100% - (var(--per-view) - 1) * var(--gap)) / var(--per-view)); scroll-snap-align: center; }
+.week .wday { flex: 0 0 calc((100% - (var(--per-view) - 1) * var(--gap)) / var(--per-view)); }
+.week .wday { contain: layout paint; will-change: transform, opacity; backface-visibility: hidden; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+/* Days crossing the strip's edges look partly fallen (lifted, smaller, faded)
+   in proportion to how much is cut off, and settle as they come fully in. Tied
+   to the scroll position, so it follows the finger exactly and holds when it
+   stops. app.js (dropInDays) does the same where this isn't supported. */
+@supports (animation-timeline: view()) {
+  .week .wday {
+    animation: wday-edge linear both;
+    animation-timeline: view(inline);
+    animation-range: entry 0% exit 100%;
+  }
+}
+/* Smooth in-out curve over the whole crossing (no burst at the very edge). The
+   days are their own compositor layers (will-change), drawn once and only
+   moved, so text and rings don't re-rasterise and shimmer while scrolling. */
+@keyframes wday-edge {
+  entry 0% { opacity: 0; transform: translate3d(0, -32px, 0) scale(0.92); animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1); }
+  entry 100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  exit 0% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); animation-timing-function: cubic-bezier(0.75, 0, 0.55, 1); }
+  exit 100% { opacity: 0; transform: translate3d(0, -32px, 0) scale(0.92); }
+}
+@media (prefers-reduced-motion: reduce) { .week .wday { animation: none; } }
 .wday {
   position: relative;
   display: flex;
@@ -270,7 +299,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
   border: 1px solid transparent;
   transition: background-color 200ms var(--ease), border-color 200ms var(--ease), transform 200ms var(--ease);
 }
-.wday:hover { background: var(--card); }
+@media (hover: hover) { .wday:hover { background: var(--card); } }
 .wday:active { transform: scale(0.96); }
 .wday[aria-current="date"] { background: var(--card-2); border-color: var(--line-strong); }
 .wday .label { font-size: 0.8125rem; }
@@ -1121,3 +1150,135 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-left; }
   .ring-row { padding: 5px 8px; margin: 0 -8px; }
   .ring-value { font-size: 1.5rem; }
 }
+
+/* ---------- Log + : log an activity to Google Health ---------- */
+.log-fab {
+  position: fixed;
+  z-index: 29;
+  right: 18px;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 48px; padding: 0 18px 0 20px;
+  border-radius: var(--pill);
+  background: var(--text); color: var(--bg);
+  font: 600 1rem/1 var(--font);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: transform 520ms var(--bounce, var(--ease-out)), opacity 200ms var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.log-fab .ph { width: 18px; height: 18px; }
+.log-fab:active { transform: scale(0.94); transition-duration: 90ms; }
+@media (min-width: 721px) { .log-fab { bottom: 28px; right: 28px; } }
+body.log-open .log-fab { opacity: 0; pointer-events: none; }
+
+.log-sheet { position: fixed; inset: 0; z-index: 60; }
+.log-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 260ms var(--ease); }
+.log-panel {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+  background: var(--card); border: 1px solid var(--line-strong); border-bottom: 0;
+  border-radius: 26px 26px 0 0;
+  transform: translateY(100%);
+  transition: transform 420ms var(--ease-out);
+}
+@media (min-width: 721px) {
+  .log-panel { left: 50%; right: auto; bottom: 50%; width: min(520px, 92vw); border-radius: 26px; border-bottom: 1px solid var(--line-strong);
+    transform: translate(-50%, 60%); opacity: 0; transition: transform 380ms var(--ease-out), opacity 240ms var(--ease); }
+  .log-sheet.open .log-panel { transform: translate(-50%, 50%); opacity: 1; }
+}
+.log-sheet.open .log-scrim { opacity: 1; }
+.log-sheet.open .log-panel { transform: none; }
+.log-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line-strong); margin: 0 auto 2px; }
+.log-head { display: flex; align-items: center; gap: 10px; }
+.log-head h2 { margin: 0; font-size: 1.375rem; font-weight: 700; letter-spacing: -0.01em; }
+.log-x { width: 40px; height: 40px; margin-left: -8px; }
+.log-x .ph { width: 20px; height: 20px; }
+
+.log-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.log-field[hidden] { display: none; }
+.log-label, .log-sub { font-family: var(--font-label); font-weight: 600; font-size: 0.8125rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); }
+.log-box {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 50px; padding: 0 14px;
+  border-radius: 14px; background: var(--card-2); border: 1px solid var(--line-strong);
+  color: var(--text-2);
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.log-box:focus-within { border-color: var(--strain); box-shadow: 0 0 0 3px color-mix(in srgb, var(--strain) 22%, transparent); }
+.log-box .ph { width: 20px; height: 20px; flex: none; }
+.log-box input {
+  flex: 1; min-width: 0; height: 48px; border: 0; outline: 0; background: none;
+  color: var(--text); font: 500 1.0625rem var(--font); color-scheme: dark;
+}
+.log-box input::placeholder { color: var(--text-3); }
+.log-box input[type="search"]::-webkit-search-cancel-button { display: none; }
+.log-act-icon { color: var(--strain); display: grid; }
+.log-act-icon .ph { width: 24px; height: 24px; }
+.log-unit { color: var(--text-3); font-size: 0.9375rem; }
+.log-sub { margin-bottom: -4px; }
+
+.log-chips, .log-quick { display: flex; flex-wrap: wrap; gap: 8px; }
+.log-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 40px; padding: 0 14px;
+  border-radius: 12px; border: 1px solid var(--line-strong); background: transparent;
+  color: var(--text); font: 500 0.9375rem var(--font);
+  transition: transform 520ms var(--bounce, var(--ease-out)), background-color 160ms var(--ease), border-color 160ms var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+.log-chip .ph { width: 18px; height: 18px; color: var(--text-2); }
+.log-chip:active { transform: scale(0.95); transition-duration: 90ms; }
+.log-chip.on { background: color-mix(in srgb, var(--strain) 22%, transparent); border-color: color-mix(in srgb, var(--strain) 60%, transparent); color: var(--text); }
+.log-chip.on .ph { color: var(--strain); }
+.log-chip.small { min-height: 36px; padding: 0 12px; font-size: 0.875rem; border-radius: var(--pill); }
+.log-empty { margin: 0; color: var(--text-3); font-size: 0.875rem; }
+.log-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.log-more summary {
+  list-style: none; cursor: pointer; padding: 6px 0;
+  font-size: 1.0625rem; font-weight: 600; color: var(--text);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.log-more summary::-webkit-details-marker { display: none; }
+.log-more summary::after { content: '+'; font-size: 1.375rem; font-weight: 400; color: var(--text-3); }
+.log-more[open] summary::after { content: '−'; }
+.log-more[open] .log-pair { margin-top: 8px; }
+.log-error { margin: 0; color: var(--bad, #FF6B6B); font-size: 0.875rem; }
+.log-note { margin: 0; color: var(--text-3); font-size: 0.8125rem; }
+.log-save {
+  min-height: 54px; border: 0; border-radius: var(--pill);
+  background: var(--text); color: var(--bg); font: 700 1.0625rem var(--font);
+  transition: transform 520ms var(--bounce, var(--ease-out)), opacity 160ms var(--ease);
+}
+.log-save:active:not(:disabled) { transform: scale(0.97); transition-duration: 90ms; }
+.log-save:disabled { opacity: 0.45; }
+
+.toast {
+  position: fixed; z-index: 70; left: 50%;
+  bottom: calc(100px + env(safe-area-inset-bottom));
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 18px; border-radius: 16px;
+  background: var(--raised); border: 1px solid var(--line-strong); color: var(--text);
+  font-size: 0.9375rem; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, 16px); opacity: 0; pointer-events: none;
+  transition: transform 360ms var(--ease-out), opacity 220ms var(--ease);
+}
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
+
+.w-delete {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 0 16px; border-radius: var(--pill);
+  border: 1px solid color-mix(in srgb, var(--bad, #FF6B6B) 45%, transparent); background: transparent;
+  color: var(--bad, #FF6B6B); font: 600 0.9375rem var(--font);
+}
+.w-delete .ph { width: 18px; height: 18px; }
+.w-delete.armed { background: var(--bad, #FF6B6B); color: var(--bg); }
+.w-delete-note { margin-top: -8px; }
+.log-when { display: flex; flex-direction: column; gap: 14px; }
+.log-box input[type="date"], .log-box input[type="time"] { text-align: left; }
+.log-box input::-webkit-date-and-time-value { text-align: left; }
+/* The strip's days follow the scroll position directly: no eased transition on
+   transform (left from tap feedback), which made the fallback path wobble. */
+.week .wday { transition: background-color 200ms var(--ease), border-color 200ms var(--ease); }

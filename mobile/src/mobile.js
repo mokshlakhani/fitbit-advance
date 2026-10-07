@@ -3,7 +3,7 @@
 // computes everything with engine.js on the device, and hands the result to
 // the dashboard (app.js) through window.DataStrapHost / window.DataStrap.
 import * as store from './store.js';
-import { sync, loadRaw, dashboardProfile } from './google.js';
+import { sync, loadRaw, dashboardProfile, logWorkout as logWorkoutApi, deleteWorkout as deleteWorkoutApi } from './google.js';
 import { loadApiSources, mergeSources, loadWorkoutSamples, workoutUtcDays, localDayReadings } from './ingest.js';
 import { assemble } from './engine.js';
 import * as webauth from './webauth.js';
@@ -540,8 +540,52 @@ async function dayHeartRate(date) {
 }
 
 // ---------- Host ----------
+// ---------- Logging workouts (Log +) ----------
+// Writing needs one more Google permission, asked for the first time someone
+// saves. On the web that's a trip to Google, so the workout waits in storage
+// and is saved when the page comes back.
+async function writeToken() {
+  if (NATIVE) return (await Auth.authorize({ interactive: true, write: true })).accessToken;
+  return (await webauth.canWrite()) ? webauth.getToken() : null;
+}
+
+async function runWrite(job) {
+  const token = await writeToken();
+  if (!token) {
+    await store.set('pendingWrite', job);
+    await webauth.signInToWrite(); // leaves the page
+    return new Promise(() => {});
+  }
+  const tok = async ({ refresh = false } = {}) => (refresh ? writeToken() : token);
+  if (job.kind === 'log') {
+    const e = job.entry;
+    await logWorkoutApi(tok, { ...e, start: new Date(e.start) });
+  } else {
+    await deleteWorkoutApi(tok, job.id);
+  }
+  await recomputeAndShow();
+}
+
+async function resumePendingWrite() {
+  const job = await store.get('pendingWrite');
+  if (!job) return;
+  await store.del('pendingWrite');
+  if (!(await webauth.canWrite())) {
+    window.DataStrap.toast('Google didn’t allow adding workouts, so nothing was saved.');
+    return;
+  }
+  try {
+    await runWrite(job);
+    window.DataStrap.toast(job.kind === 'log' ? `${job.entry.label} logged. It’ll show in the Fitbit app too.` : 'Workout deleted.');
+  } catch (err) {
+    window.DataStrap.toast(`Couldn’t save: ${err.message || err}`);
+  }
+}
+
 window.DataStrapHost = {
   dayHeartRate,
+  logWorkout: entry => runWrite({ kind: 'log', entry }),
+  deleteWorkout: id => runWrite({ kind: 'delete', id }),
   async load() {
     mountUi();
     pullToRefresh();
@@ -570,6 +614,7 @@ window.DataStrapHost = {
       return null;
     }
     if (signedIn) setTimeout(askSexOnce, 800);
+    if (signedIn && !NATIVE) setTimeout(resumePendingWrite, 600);
     return data;
   },
 };

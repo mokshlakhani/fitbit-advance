@@ -615,7 +615,7 @@ function weekStrip() {
   lastStripIdx = state.idx;
   // Every day, in a strip you can swipe all the way back through.
   const all = days().map((_, i) => i);
-  return `<nav class="week" aria-label="Days">${all.map(i => {
+  return `<div class="week-wrap"><nav class="week" aria-label="Days">${all.map(i => {
     const d = days()[i];
     const rec = M.recovery.pick(d);
     const t = tierOf(rec);
@@ -628,7 +628,7 @@ function weekStrip() {
       <span class="wday-num">${parseDate(d.date).getDate()}</span>
       <svg class="wday-ring" viewBox="0 0 26 26" aria-hidden="true"><circle class="track" cx="13" cy="13" r="10"/>${arc}</svg>
     </a>`;
-  }).join('')}</nav>`;
+  }).join('')}</nav></div>`;
 }
 
 function strainWord(s) {
@@ -889,6 +889,8 @@ function metricCard(key, { wide = false } = {}) {
 }
 
 function workoutIcon(name) {
+  const a = activityNamed(name);
+  if (a) return a.icon;
   if (/(cycl|bike|spin)/i.test(name)) return 'bike';
   if (/(run|treadmill|jog)/i.test(name)) return 'run';
   if (/(walk|hike)/i.test(name)) return 'footprints';
@@ -1120,6 +1122,9 @@ function renderWorkout() {
     ${zones}
     ${extras.length ? statCards(extras) : ''}
     ${compare}
+    ${w.logged_in_app && w.id && window.DataStrapHost && window.DataStrapHost.deleteWorkout
+      ? `<button type="button" class="w-delete" data-delete-workout="${esc(w.id)}">${ph('trash')}Delete this workout</button>
+         <p class="note w-delete-note">Logged from DataStrap. Deleting removes it from Google Health and the Fitbit app too.</p>` : ''}
   `;
 }
 
@@ -1147,7 +1152,246 @@ function renderHome() {
     ${myDayPanel(d)}
     ${sections}
     <section class="section"><div class="section-head"><h2>Trends</h2></div>${trendsPanel()}</section>
+    ${canLog() ? `<button type="button" class="log-fab" data-log-open aria-label="Log an activity">Log ${ph('plus', '', 'bold')}</button>` : ''}
   `;
+}
+
+// ---------- Log + (log a workout to Google Health) ----------
+// Every exercise type the Google Health API accepts, named as in the Fitbit
+// app where it has a name, grouped into families for the icon and the
+// "similar activities" chips. `TYPE` alone gets a sentence-case label.
+const ACTIVITY_FAMILIES = [
+  ['walk', 'walk', true, 'WALKING:Walk|INCLINE_WALK|NORDIC_WALKING|POWER_WALKING:Power walk|RUCKING|TREADMILL_WALK|WALK_WITH_WEIGHTS|STROLLER_WALK|HIKING:Hike|BACKPACKING|ORIENTEERING'],
+  ['run', 'run', true, 'RUNNING:Run|TREADMILL:Treadmill run|TRAIL_RUN|INCLINE_RUN|TRACK_AND_FIELD'],
+  ['bike', 'bike', true, 'BIKING:Bike|OUTDOOR_BIKE|MOUNTAIN_BIKE|STATIONARY_BIKE|SPINNING|ELECTRIC_BIKE:E-bike|ASSAULT_BIKE|HAND_CYCLING|UNICYCLING'],
+  ['swim', 'swim', true, 'SWIMMING:Swim|SWIMMING_POOL:Pool swim|SWIMMING_OPEN_WATER:Open water swim|WATER_AEROBICS|WATER_JOGGING|WATER_POLO|WATER_VOLLEYBALL|SYNCHRONIZED_SWIMMING|DIVING|SCUBA_DIVING|SNORKELING'],
+  ['strength', 'dumbbell', false, 'WEIGHTS|WEIGHT_MACHINES|FREE_WEIGHTS|WEIGHTLIFTING|STRENGTH_TRAINING|FUNCTIONAL_STRENGTH_TRAINING:Functional strength|POWERLIFTING|BODY_WEIGHT:Bodyweight|CALISTHENICS|CORE_TRAINING|RESISTANCE_BANDS|TRX:TRX|CROSSFIT:CrossFit|CIRCUIT_TRAINING|BOOTCAMP'],
+  ['cardio', 'flame', false, 'WORKOUT|HIIT:HIIT|INTERVAL_WORKOUT|TABATA_WORKOUT:Tabata|AEROBIC_WORKOUT|CARDIO_WORKOUT|CARDIO_SCULPT|CROSS_TRAINING|ELLIPTICAL|ROWING_MACHINE|STAIRCLIMBER:Stair climber|STEP_TRAINING|JUMPING_ROPE:Jump rope|EXERCISE_CLASS|OUTDOOR_WORKOUT|FITNESS_GAMING|TRAMPOLINE|MULTISPORT'],
+  ['mind', 'yoga', false, 'YOGA|YOGA_VINYASA:Vinyasa yoga|YOGA_HATHA:Hatha yoga|YOGA_POWER:Power yoga|YOGA_BIKRAM:Bikram yoga|PILATES|BARRE_CLASS:Barre|STRETCHING|TAI_CHI|MEDITATE:Meditation'],
+  ['dance', 'dance', false, 'DANCING|ZUMBA|HIP_HOP:Hip hop|BALLET|BALLROOM_DANCE|JAZZ_DANCE|MODERN_DANCE|TANGO|BREAKDANCING|CHEERLEADING|GYMNASTICS'],
+  ['combat', 'boxing', false, 'BOXING|KICKBOXING|MARTIAL_ARTS|KARATE|TAEKWONDO|JIU_JITSU:Jiu-jitsu|MUAY_THAI:Muay Thai|WRESTLING|FENCING'],
+  ['racket', 'tennis', false, 'TENNIS|TABLE_TENNIS|BADMINTON|SQUASH|PADEL|PICKELBALL:Pickleball|RACQUETBALL|RACKET_SPORTS'],
+  ['team', 'volleyball', false, 'SOCCER:Football|BASKETBALL|CRICKET|VOLLEYBALL|VOLLEYBALL_BEACH:Beach volleyball|HOCKEY|FIELD_HOCKEY|RUGBY|HANDBALL|BASEBALL|SOFTBALL|LACROSSE|FOOTBALL_AMERICAN:American football|FOOTBALL_AUSTRALIAN:Australian football|ULTIMATE_FRISBEE|FRISBEE_PLAYING_GENERAL:Frisbee|POLO|GOLF|BOWLING|BILLIARDS|CROQUET|CURLING|ARCHERY|SHOOTING|SPORT'],
+  ['water', 'boat', true, 'ROWING|KAYAKING|CANOEING|PADDLEBOARDING|SURFING|SAILING|WINDSURFING|KITESURFING|WAKEBOARDING|WATER_SKIING|FOILING|WATER_SPORT'],
+  ['snow', 'snow', true, 'SKIING|CROSS_COUNTRY_SKI:Cross-country skiing|SNOWBOARDING|SNOWSHOEING|SNOWMOBILING|SNOW_SPORT|ICE_SKATING|SPEED_SKATING|SKATING|ROLLER_SKATING|ROLLERBLADING|SKATEBOARDING|SCOOTERING:Scooter|ELECTRIC_SCOOTER:E-scooter'],
+  ['outdoor', 'mountain', false, 'CLIMBING|ROCK_CLIMBING|INDOOR_CLIMBING|PARKOUR|EQUESTRIAN_SPORTS:Horse riding|PARAGLIDING|SKYDIVING|HUNTING|FISHING|MOTOCROSS|MOTORCYCLE:Motorcycling'],
+  ['everyday', 'chores', false, 'HOUSEHOLD_CHORES|CLEANING|GARDENING|MOWING_LAWN:Mowing|WEEDING|HOEING|SHOVELING|CARPENTRY|PAINTING|MUSICAL_PERFORMANCE|WHEELCHAIR|OTHER'],
+];
+// Extra words people search with, per family.
+const ACTIVITY_WORDS = {
+  walk: 'walking steps', run: 'running jog jogging', bike: 'cycling cycle bicycle', swim: 'swimming pool',
+  strength: 'gym lifting lift resistance', cardio: 'gym cardio interval', mind: 'stretch mobility breathing',
+  combat: 'fight fighting', racket: 'racquet', team: 'sport ball', water: 'boat paddle', snow: 'winter skate', outdoor: 'climb',
+};
+const ACTIVITIES = ACTIVITY_FAMILIES.flatMap(([family, icon, distance, list]) => list.split('|').map(entry => {
+  const [type, name] = entry.split(':');
+  const label = name || type.charAt(0) + type.slice(1).toLowerCase().replace(/_/g, ' ');
+  return { type, label, family, icon, distance, words: `${label} ${type.replace(/_/g, ' ')} ${ACTIVITY_WORDS[family] || ''}`.toLowerCase() };
+}));
+const ACTIVITY_BY_LABEL = new Map(ACTIVITIES.map(a => [a.label.toLowerCase(), a]));
+const activityNamed = name => ACTIVITY_BY_LABEL.get(String(name || '').toLowerCase()) || null;
+const POPULAR = ['WALKING', 'RUNNING', 'WEIGHTS', 'BIKING', 'YOGA', 'HIIT', 'SWIMMING', 'SOCCER', 'BADMINTON'];
+
+const canLog = () => Boolean(window.DataStrapHost && window.DataStrapHost.logWorkout && !state.demo);
+
+// Activities this person has done, most frequent first (for the first chips).
+function recentActivities() {
+  const counts = new Map();
+  for (const d of days().slice(-120)) {
+    for (const w of d.strain.workouts || []) {
+      const a = activityNamed(w.name);
+      if (a) counts.set(a, (counts.get(a) || 0) + 1);
+    }
+  }
+  return [...counts.entries()].sort((x, y) => y[1] - x[1]).map(([a]) => a);
+}
+
+function activityChips(query, selected) {
+  const q = query.trim().toLowerCase();
+  let list;
+  if (q && !(selected && q === selected.label.toLowerCase())) {
+    const terms = q.split(/\s+/);
+    list = ACTIVITIES.filter(a => terms.every(t => a.words.includes(t)))
+      .sort((x, y) => (y.label.toLowerCase().startsWith(q) ? 1 : 0) - (x.label.toLowerCase().startsWith(q) ? 1 : 0));
+  } else if (selected) {
+    list = [selected, ...ACTIVITIES.filter(a => a.family === selected.family && a !== selected)];
+  } else {
+    const seen = new Set();
+    list = [...recentActivities(), ...POPULAR.map(t => ACTIVITIES.find(a => a.type === t))].filter(a => !seen.has(a) && seen.add(a));
+  }
+  if (!list.length) return '<p class="log-empty">No activity matches. Try another word, or pick Other.</p>';
+  const max = q && !(selected && q === selected.label.toLowerCase()) ? 24 : 9;
+  return list.slice(0, max).map(a => `<button type="button" class="log-chip ${a === selected ? 'on' : ''}" data-type="${a.type}" aria-pressed="${a === selected}">
+      ${ph(a === selected ? 'check' : a.icon, '', a === selected ? 'bold' : 'regular')}${esc(a.label)}</button>`).join('');
+}
+
+const pad2 = n => String(n).padStart(2, '0');
+const localDateIso = t => `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
+
+function openLogSheet() {
+  if (document.querySelector('.log-sheet')) return;
+  const now = new Date();
+  // Default: a 30-minute session that has just finished, on a 5-minute mark.
+  const start = new Date(now.getTime() - 30 * 60000);
+  start.setMinutes(Math.floor(start.getMinutes() / 5) * 5, 0, 0);
+  let selected = recentActivities()[0] || ACTIVITIES.find(a => a.type === 'WALKING');
+  const sheet = document.createElement('div');
+  sheet.className = 'log-sheet';
+  sheet.innerHTML = `<div class="log-scrim" data-log-close></div>
+    <form class="log-panel" role="dialog" aria-modal="true" aria-labelledby="logTitle" novalidate>
+      <div class="log-grab" aria-hidden="true"></div>
+      <header class="log-head">
+        <button type="button" class="icon-btn log-x" data-log-close aria-label="Close">${ph('x', '', 'bold')}</button>
+        <h2 id="logTitle">Log activity</h2>
+      </header>
+      <label class="log-field">
+        <span class="log-label">Activity</span>
+        <span class="log-box"><span class="log-act-icon" aria-hidden="true"></span>
+          <input name="q" type="search" enterkeyhint="search" autocomplete="off" spellcheck="false" placeholder="Search ${ACTIVITIES.length} activities" aria-describedby="logChipsLabel">
+          <span class="log-search-icon" aria-hidden="true">${ph('search')}</span></span>
+      </label>
+      <div class="log-sub" id="logChipsLabel">Suggested</div>
+      <div class="log-chips"></div>
+      <div class="log-when">
+        <label class="log-field"><span class="log-label">Date</span>
+          <span class="log-box">${ph('calendar')}<input name="date" type="date" required max="${localDateIso(now)}" value="${localDateIso(start)}"></span></label>
+        <label class="log-field"><span class="log-label">Start time</span>
+          <span class="log-box">${ph('clock')}<input name="time" type="time" required value="${pad2(start.getHours())}:${pad2(start.getMinutes())}"></span></label>
+      </div>
+      <label class="log-field"><span class="log-label">Duration</span>
+        <span class="log-box">${ph('timer')}<input name="minutes" type="number" inputmode="numeric" min="1" max="1440" required value="30"><span class="log-unit">min</span></span></label>
+      <div class="log-quick" role="group" aria-label="Quick durations">${[15, 30, 45, 60, 90].map(m => `<button type="button" class="log-chip small ${m === 30 ? 'on' : ''}" data-min="${m}">${m < 60 ? `${m} min` : `${m / 60 % 1 ? m / 60 : m / 60} h`.replace('1.5 h', '1½ h')}</button>`).join('')}</div>
+      <details class="log-more">
+        <summary>Optional information</summary>
+        <div class="log-pair">
+          <label class="log-field"><span class="log-label">Calories</span>
+            <span class="log-box">${ph('flame')}<input name="calories" type="number" inputmode="numeric" min="0" max="10000" placeholder="—"><span class="log-unit">kcal</span></span></label>
+          <label class="log-field log-distance"><span class="log-label">Distance</span>
+            <span class="log-box">${ph('footprints')}<input name="distance" type="number" inputmode="decimal" min="0" max="1000" step="0.01" placeholder="—"><span class="log-unit">km</span></span></label>
+        </div>
+      </details>
+      <p class="log-error" role="alert" hidden></p>
+      <p class="log-note">Saved to Google Health, so it shows in the Fitbit app too.</p>
+      <button type="submit" class="log-save">Save</button>
+    </form>`;
+  document.body.appendChild(sheet);
+  document.body.classList.add('log-open');
+  const form = sheet.querySelector('form');
+  const q = form.elements.q;
+  const chips = sheet.querySelector('.log-chips');
+  const err = sheet.querySelector('.log-error');
+  const save = sheet.querySelector('.log-save');
+  const showErr = msg => { err.textContent = msg; err.hidden = !msg; };
+  const sync = () => {
+    sheet.querySelector('.log-act-icon').innerHTML = ph(selected ? selected.icon : 'search', '', 'duotone');
+    sheet.querySelector('.log-sub').textContent = q.value.trim() && !(selected && q.value === selected.label) ? 'Matching activities' : selected ? 'Similar activities' : 'Suggested';
+    chips.innerHTML = activityChips(q.value, selected);
+    sheet.querySelector('.log-distance').hidden = !(selected && selected.distance);
+    save.disabled = !selected;
+  };
+  q.value = selected ? selected.label : '';
+  sync();
+
+  const close = () => {
+    sheet.classList.remove('open');
+    document.body.classList.remove('log-open');
+    setTimeout(() => sheet.remove(), 260);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => sheet.classList.add('open')));
+  q.addEventListener('focus', () => q.select());
+  q.addEventListener('input', () => {
+    if (selected && q.value !== selected.label) selected = null;
+    showErr('');
+    sync();
+  });
+  sheet.addEventListener('click', e => {
+    if (e.target.closest('[data-log-close]')) { close(); return; }
+    const chip = e.target.closest('[data-type]');
+    if (chip) {
+      selected = ACTIVITIES.find(a => a.type === chip.dataset.type);
+      q.value = selected.label;
+      showErr('');
+      sync();
+      return;
+    }
+    const quick = e.target.closest('[data-min]');
+    if (quick) {
+      form.elements.minutes.value = quick.dataset.min;
+      sheet.querySelectorAll('[data-min]').forEach(b => b.classList.toggle('on', b === quick));
+    }
+  });
+  form.elements.minutes.addEventListener('input', () => {
+    sheet.querySelectorAll('[data-min]').forEach(b => b.classList.toggle('on', b.dataset.min === form.elements.minutes.value));
+  });
+  document.addEventListener('keydown', function esc(e) {
+    if (!sheet.isConnected) { document.removeEventListener('keydown', esc); return; }
+    if (e.key === 'Escape') close();
+  });
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!selected) { showErr('Pick an activity from the list.'); return; }
+    const f = form.elements;
+    const minutes = Math.round(Number(f.minutes.value));
+    const startAt = new Date(`${f.date.value}T${f.time.value}`);
+    if (!f.date.value || !f.time.value || isNaN(startAt)) { showErr('Choose a date and start time.'); return; }
+    if (!(minutes >= 1 && minutes <= 1440)) { showErr('Duration must be between 1 minute and 24 hours.'); return; }
+    if (startAt.getTime() + minutes * 60000 > Date.now() + 60000) { showErr('That would end in the future. Check the start time and duration.'); return; }
+    showErr('');
+    save.disabled = true;
+    save.textContent = 'Saving…';
+    try {
+      await window.DataStrapHost.logWorkout({
+        type: selected.type, label: selected.label, start: startAt.toISOString(), minutes,
+        utcOffsetS: -startAt.getTimezoneOffset() * 60,
+        calories: Number(f.calories.value) || 0,
+        distanceKm: selected.distance ? Number(f.distance.value) || 0 : 0,
+      });
+      close();
+      toast(`${selected.label} logged. It’ll show in the Fitbit app too.`);
+    } catch (error) {
+      save.disabled = false;
+      save.textContent = 'Save';
+      showErr(error && error.message ? error.message : 'Couldn’t save. Check your connection and try again.');
+    }
+  });
+}
+
+// Two taps: the first arms the button, the second deletes.
+async function deleteWorkout(btn) {
+  if (!btn.classList.contains('armed')) {
+    btn.classList.add('armed');
+    btn.lastChild.textContent = 'Tap again to delete';
+    setTimeout(() => { if (btn.isConnected && !btn.disabled) { btn.classList.remove('armed'); btn.lastChild.textContent = 'Delete this workout'; } }, 4000);
+    return;
+  }
+  btn.disabled = true;
+  btn.lastChild.textContent = 'Deleting…';
+  const id = btn.dataset.deleteWorkout;
+  // Leave the page first: the refresh after deleting re-renders the current
+  // page, and this workout won't be in it any more.
+  go(hrefMetric('strain', 'day', day().date), { replace: true });
+  try {
+    await window.DataStrapHost.deleteWorkout(id);
+    toast('Workout deleted.');
+  } catch (error) {
+    toast(error && error.message ? error.message : 'Couldn’t delete. Try again.');
+  }
+}
+
+let toastTimer = null;
+function toast(msg) {
+  let el = document.querySelector('.toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'toast';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
 }
 
 // ---------- Detail ----------
@@ -1597,8 +1841,46 @@ function placeStrip(root) {
     stripScroll = target;
     // A strip being replaced can report a last scroll of 0; only the live one counts.
     strip.addEventListener('scroll', () => { if (strip.isConnected) stripScroll = strip.scrollLeft; }, { passive: true });
+    requestAnimationFrame(() => dropInDays(strip));
   };
   place();
+}
+
+// Days at the strip's edges sit partly fallen: lifted and faded by how far
+// they're cut off, settling into place as they come fully into view, and
+// holding that pose when the finger stops. Pure CSS (a scroll-driven
+// animation on the compositor) where the browser supports it; otherwise this
+// sets the same pose from the scroll position once per frame.
+const EDGE_CSS = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('animation-timeline: view()');
+let edgeCleanup = null;
+function dropInDays(strip) {
+  if (edgeCleanup) { edgeCleanup(); edgeCleanup = null; }
+  if (EDGE_CSS || reducedMotion || !strip.isConnected) return;
+  const days = [...strip.querySelectorAll('.wday')];
+  let boxes = [], width = 0, frame = 0;
+  const measure = () => { width = strip.clientWidth; boxes = days.map(el => [el.offsetLeft - strip.offsetLeft, el.offsetWidth]); };
+  const ease = t => t * t * (3 - 2 * t); // smoothstep
+  const paint = () => {
+    frame = 0;
+    const x = strip.scrollLeft;
+    days.forEach((el, i) => {
+      const [left, w] = boxes[i];
+      const l = left - x;
+      // 1 when fully inside, 0 when fully outside, in between across the edge.
+      const t = l < 0 ? (l + w) / w : l + w > width ? (width - l) / w : 1;
+      if (t <= 0 || t >= 1) { if (el.style.transform) { el.style.transform = ''; el.style.opacity = ''; } return; }
+      const k = 1 - ease(Math.max(0, Math.min(1, t)));
+      el.style.transform = `translate3d(0, ${(-32 * k).toFixed(2)}px, 0) scale(${(1 - 0.08 * k).toFixed(3)})`;
+      el.style.opacity = (1 - k).toFixed(3);
+    });
+  };
+  const onScroll = () => { if (!frame) frame = requestAnimationFrame(paint); };
+  const onResize = () => { measure(); onScroll(); };
+  measure();
+  paint();
+  strip.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onResize);
+  edgeCleanup = () => { strip.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onResize); if (frame) cancelAnimationFrame(frame); };
 }
 
 // ---------- Heart rate: every reading, loaded on demand ----------
@@ -2023,6 +2305,9 @@ function bindEvents() {
   picker.addEventListener('change', e => { const i = dateIndex(e.target.value); if (i >= 0) setDay(i); });
 
   document.addEventListener('click', e => {
+    if (e.target.closest('[data-log-open]')) { openLogSheet(); return; }
+    const del = e.target.closest('[data-delete-workout]');
+    if (del) { deleteWorkout(del); return; }
     const rep = e.target.closest('a[data-replace]');
     if (rep && rep.getAttribute('href')) {
       e.preventDefault();
@@ -2115,6 +2400,7 @@ function showData(data, { demo = false } = {}) {
 // The Android app (mobile/) computes the data on the phone and provides it
 // through window.DataStrapHost instead of dashboard_data.json.
 window.DataStrap = {
+  toast,
   refresh(data) {
     hrCache.clear();
     const first = !state.data;

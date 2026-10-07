@@ -20,6 +20,7 @@ import com.google.android.gms.auth.api.identity.Identity;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.Scope;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -40,6 +41,10 @@ public class GoogleHealthAuthPlugin extends Plugin {
         new Scope("https://www.googleapis.com/auth/googlehealth.profile.readonly"),
         new Scope("https://www.googleapis.com/auth/googlehealth.settings.readonly")
     );
+
+    // Asked for only when someone first logs a workout (Log +), so signing in
+    // to read never shows a "write" permission.
+    private static final Scope WRITE_SCOPE = new Scope("https://www.googleapis.com/auth/googlehealth.activity_and_fitness.writeonly");
 
     private ActivityResultLauncher<IntentSenderRequest> consentLauncher;
     private PluginCall consentCall;
@@ -69,11 +74,20 @@ public class GoogleHealthAuthPlugin extends Plugin {
         return Identity.getAuthorizationClient(getActivity());
     }
 
-    /** {interactive: boolean} -> {accessToken}. Without interactive, rejects NEEDS_CONSENT instead of showing a screen. */
+    /**
+     * {interactive: boolean, write: boolean} -> {accessToken}. Without interactive,
+     * rejects NEEDS_CONSENT instead of showing a screen. write adds permission to
+     * log workouts.
+     */
     @PluginMethod
     public void authorize(PluginCall call) {
         boolean interactive = Boolean.TRUE.equals(call.getBoolean("interactive", false));
-        AuthorizationRequest request = AuthorizationRequest.builder().setRequestedScopes(SCOPES).build();
+        List<Scope> scopes = SCOPES;
+        if (Boolean.TRUE.equals(call.getBoolean("write", false))) {
+            scopes = new ArrayList<>(SCOPES);
+            scopes.add(WRITE_SCOPE);
+        }
+        AuthorizationRequest request = AuthorizationRequest.builder().setRequestedScopes(scopes).build();
         client().authorize(request)
             .addOnSuccessListener(result -> {
                 if (!result.hasResolution()) {

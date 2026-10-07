@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 import profile_store
+from google_health_sync import is_datastrap
 
 API_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'api_data')
 
@@ -196,6 +197,8 @@ def load_workouts():
             'elevation_m': round(float(m['elevationGainMillimeters']) / 1000) if m.get('elevationGainMillimeters') else None,
             'active_zone_minutes': int(m['activeZoneMinutes']) if m.get('activeZoneMinutes') else None,
             'fitbit_zones': _fitbit_zones(m.get('heartRateZoneDurations')),
+            'id': p.get('name'),
+            'logged_in_app': is_datastrap(p),
         })
     return out
 

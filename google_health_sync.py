@@ -39,6 +39,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
     'https://www.googleapis.com/auth/googlehealth.profile.readonly',
     'https://www.googleapis.com/auth/googlehealth.settings.readonly',
+    # Logging workouts from DataStrap (Log + on the phone).
+    'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.writeonly',
 ]
 
 
@@ -261,6 +263,19 @@ DATA_TYPES = {
 SOURCE_FAMILY = 'users/me/dataSourceFamilies/google-sources'
 ALL_SOURCES_ONLY = {'sleep'}  # API rejects source filtering here; filtered in api_ingest
 
+# Workouts logged from DataStrap itself. The source filter above leaves out
+# every app's own writes, DataStrap's included, so they're fetched separately
+# and recognised by the Google Cloud project behind DataStrap's OAuth clients
+# (web, desktop) or the Android app's package name.
+DATASTRAP_PROJECT = '724732375940-'
+DATASTRAP_PACKAGE = 'app.datastrap.personal'
+
+
+def is_datastrap(p):
+    app = (p.get('dataSource') or {}).get('application') or {}
+    return any(isinstance(v, str) and (v.startswith(DATASTRAP_PROJECT) or v == DATASTRAP_PACKAGE) for v in app.values())
+
+
 def fmt_bound(d, kind):
     if kind == 'date':
         return d.isoformat()
@@ -268,7 +283,7 @@ def fmt_bound(d, kind):
         return f"{d.isoformat()}T00:00:00"
     return f"{d.isoformat()}T00:00:00Z"
 
-def fetch_data_type(access_token, data_type, start, end):
+def fetch_data_type(access_token, data_type, start, end, all_sources=False):
     field, kind = DATA_TYPES[data_type]
     flt = f'{field} >= "{fmt_bound(start, kind)}" AND {field} < "{fmt_bound(end, kind)}"'
     if data_type == 'sleep':
@@ -276,7 +291,7 @@ def fetch_data_type(access_token, data_type, start, end):
     points, page_token = [], None
     while True:
         params = {'filter': flt, 'pageSize': 10000}
-        if data_type not in ALL_SOURCES_ONLY:
+        if data_type not in ALL_SOURCES_ONLY and not all_sources:
             params['dataSourceFamily'] = SOURCE_FAMILY
         if page_token:
             params['pageToken'] = page_token
@@ -368,6 +383,17 @@ def sync_daily_files(access_token, data_type, start, end):
         counts = list(pool.map(pull, days))
     return len(days), sum(counts)
 
+def workout_civil_start(p):
+    """A workout's local start as 'YYYY-MM-DDTHH:MM:SS' (what the API filters on)."""
+    iv = (p.get('exercise') or {}).get('interval') or {}
+    try:
+        t = datetime.fromisoformat(iv['startTime'].replace('Z', '+00:00'))
+        off = int(str(iv.get('startUtcOffset', '0s')).rstrip('s') or 0)
+    except (KeyError, ValueError):
+        return None
+    return (t + timedelta(seconds=off)).strftime('%Y-%m-%dT%H:%M:%S')
+
+
 def point_key(p):
     # Sessions (sleep, exercise) carry a stable resource name; daily summaries
     # are unique per source + day.
@@ -376,14 +402,16 @@ def point_key(p):
     body = next(v for k, v in p.items() if k != 'dataSource')
     return json.dumps([p.get('dataSource'), body.get('date')], sort_keys=True)
 
-def merge_into_file(path, points):
+def merge_into_file(path, points, drop=None):
     # Each run only pulls a recent window, so merge it into what is already
     # stored rather than overwriting older history. Newly fetched points win.
+    # `drop(p)` removes stored points the window shows are gone (deleted workouts).
     merged = {}
     if os.path.exists(path):
         with open(path) as f:
             for p in json.load(f):
-                merged[point_key(p)] = p
+                if drop is None or not drop(p):
+                    merged[point_key(p)] = p
     for p in points:
         merged[point_key(p)] = p
     with open(path, 'w') as f:
@@ -406,10 +434,20 @@ def sync(days, interactive=False, log=print):
                 log(f"  {data_type:38s} {n_points:8d} points ({n_days} days fetched)")
                 continue
             points = fetch_data_type(token, data_type, start, end)
+            drop = None
+            if data_type == 'exercise':
+                own = [p for p in fetch_data_type(token, data_type, start, end, all_sources=True) if is_datastrap(p)]
+                points += own
+                fresh = {point_key(p) for p in own}
+                lo, hi = fmt_bound(start, 'civil'), fmt_bound(end, 'civil')
+
+                def drop(p):
+                    civil = workout_civil_start(p)
+                    return is_datastrap(p) and civil is not None and lo <= civil < hi and point_key(p) not in fresh
         except urllib.error.HTTPError as e:
             log(f"  {data_type:38s} FAILED {e.code}: {e.read().decode('utf-8')[:300]}")
             continue
-        total = merge_into_file(os.path.join(OUT_DIR, f"{data_type}.json"), points)
+        total = merge_into_file(os.path.join(OUT_DIR, f"{data_type}.json"), points, drop)
         log(f"  {data_type:38s} {len(points):8d} points ({total} stored)")
 
 
