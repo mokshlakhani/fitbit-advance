@@ -28,6 +28,14 @@ for (const f of MODULES) cpSync(join(here, 'src', f), join(out, 'm', f));
 let html = readFileSync(join(root, 'index.html'), 'utf8');
 html = html.replace(/(<link rel="stylesheet" href="styles\.css[^"]*">)/, '$1\n  <link rel="stylesheet" href="m/mobile.css">');
 
+// config.json: the web app's Google client ID, and (both builds) where the
+// in-app feedback goes. Neither is a secret.
+const fileConfig = existsSync(join(here, 'web.config.json')) ? JSON.parse(readFileSync(join(here, 'web.config.json'), 'utf8')) : {};
+const appConfig = {
+  googleClientId: WEB ? (process.env.DATASTRAP_GOOGLE_CLIENT_ID || fileConfig.googleClientId || '') : '',
+  feedback: fileConfig.feedback || null,
+};
+
 if (WEB) {
   // Takeout import (only loaded when used) and its unzip library (MIT).
   cpSync(join(here, 'src', 'takeout.js'), join(out, 'm', 'takeout.js'));
@@ -37,10 +45,7 @@ if (WEB) {
   const version = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root }).toString().trim() + '-' + Date.now().toString(36);
   writeFileSync(join(out, 'sw.js'), readFileSync(join(here, 'src', 'sw.js'), 'utf8').replace('__VERSION__', version));
 
-  const fileConfig = existsSync(join(here, 'web.config.json')) ? JSON.parse(readFileSync(join(here, 'web.config.json'), 'utf8')) : {};
-  const clientId = process.env.DATASTRAP_GOOGLE_CLIENT_ID || fileConfig.googleClientId || '';
-  if (!clientId) console.warn('Warning: no Google client ID (web.config.json); sign-in will show an error.');
-  writeFileSync(join(out, 'config.json'), JSON.stringify({ googleClientId: clientId }));
+  if (!appConfig.googleClientId) console.warn('Warning: no Google client ID (web.config.json); sign-in will show an error.');
 
   writeFileSync(join(out, 'manifest.webmanifest'), JSON.stringify({
     name: 'DataStrap',
@@ -77,6 +82,7 @@ if (WEB) {
 }
 if (!html.includes('m/mobile.js')) throw new Error('index.html changed shape: could not add the mobile scripts');
 writeFileSync(join(out, 'index.html'), html);
+writeFileSync(join(out, 'config.json'), JSON.stringify(appConfig));
 
 const python = join(root, '.venv', 'bin', 'python');
 if (!WEB && !process.argv.includes('--no-seed') && existsSync(python) && existsSync(join(root, 'profile.json'))) {

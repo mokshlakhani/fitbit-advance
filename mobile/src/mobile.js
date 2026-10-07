@@ -299,6 +299,44 @@ function viewedDate() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// ---------- Feedback ----------
+// Messages go to the owner's Google Form (web.config.json → feedback), so
+// friends need no account and the owner reads them in Google Forms or Sheets.
+// Only what the person types is sent, plus which app, page and version they're
+// on; no health data.
+let appConfigPromise;
+const appConfig = () => (appConfigPromise ||= fetch('config.json').then(r => (r.ok ? r.json() : {})).catch(() => ({})));
+
+function feedbackContext() {
+  const v = (document.querySelector('script[src*="app.js"]')?.getAttribute('src') || '').match(/v=(\d+)/)?.[1] || '?';
+  const platform = NATIVE ? 'Android app'
+    : /iphone|ipad/i.test(navigator.userAgent) ? (navigator.standalone ? 'iPhone home-screen app' : 'iPhone Safari')
+      : /android/i.test(navigator.userAgent) ? 'Android browser' : 'Browser';
+  const page = (location.hash.split('?')[0] || '#/').slice(1) || '/';
+  return `v${v} · ${platform} · page ${page} · ${new Date().toISOString()}`;
+}
+
+async function sendFeedback(form) {
+  const cfg = (await appConfig()).feedback;
+  const f = new FormData(form);
+  const text = String(f.get('message') || '').trim();
+  const kind = String(f.get('kind') || 'Other');
+  if (!text) return { error: 'Write a message first.' };
+  const body = new URLSearchParams({
+    [cfg.fields.message]: `[${kind}] ${text}`,
+    [cfg.fields.contact]: String(f.get('contact') || '').trim(),
+    [cfg.fields.context]: feedbackContext(),
+  });
+  try {
+    // Google Forms doesn't allow reading the reply from another site, so a
+    // completed request is taken as delivered.
+    await fetch(cfg.formUrl, { method: 'POST', mode: 'no-cors', body });
+    return { ok: true };
+  } catch {
+    return { error: 'Couldn’t send. Check your connection and try again.' };
+  }
+}
+
 async function renderSheet() {
   const sheet = document.getElementById('syncSheet');
   const [signedIn, lastSync, lab, prof, vo2, lastSeconds, tempUnit] = [
@@ -349,6 +387,21 @@ async function renderSheet() {
     <p class="m-note">Google’s API doesn’t include VO₂ max. Import it from a Google Takeout export (takeout.google.com → Fitbit). Choose the downloaded .zip; only the VO₂ max files are read, and nothing is uploaded.</p>
     <label class="m-btn m-file">Import from Takeout<input type="file" accept=".zip,.json,application/zip,application/json" multiple data-field="takeout" hidden></label>
     <p class="m-note">${Object.keys(vo2).length ? `${Object.keys(vo2).length} days of VO₂ max imported.` : 'None imported yet.'}</p>
+
+    ${(await appConfig()).feedback ? `
+    <h2 class="m-title">Send feedback</h2>
+    <p class="m-note">Found a bug or have an idea? It goes straight to the person who runs DataStrap. Only what you write here is sent, with the app version and page you’re on.</p>
+    <form class="m-feedback" data-form="feedback" novalidate>
+      <div class="m-seg" role="radiogroup" aria-label="Kind of feedback">
+        ${['Bug', 'Idea', 'Other'].map((k, i) => `<label><input type="radio" name="kind" value="${k}" ${i === 0 ? 'checked' : ''}><span>${k}</span></label>`).join('')}
+      </div>
+      <label class="m-field"><span>Message</span>
+        <textarea class="m-input" name="message" id="feedbackMessage" rows="4" maxlength="2000" placeholder="What happened, or what would you like?"></textarea></label>
+      <label class="m-field"><span>Name or email <small>(optional, if you’d like a reply)</small></span>
+        <input class="m-input" name="contact" id="feedbackContact" type="text" maxlength="120" autocomplete="email"></label>
+      <p class="m-note m-feedback-status" role="status"></p>
+      <button class="m-btn primary" type="submit">Send feedback</button>
+    </form>` : ''}
 
     ${signedIn ? '<button class="m-btn quiet" data-act="signout">Sign out of Google</button>' : ''}
   `;
@@ -411,6 +464,25 @@ function mountUi() {
   });
   sheet.addEventListener('submit', async e => {
     e.preventDefault();
+    if (e.target.dataset.form === 'feedback') {
+      const form = e.target;
+      const btn = form.querySelector('button[type="submit"]');
+      const status = form.querySelector('.m-feedback-status');
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+      const res = await sendFeedback(form);
+      if (res.ok) {
+        form.reset();
+        status.textContent = 'Thanks. Your feedback was sent.';
+        btn.textContent = 'Sent';
+        setTimeout(() => { btn.disabled = false; btn.textContent = 'Send feedback'; }, 8000);
+      } else {
+        status.textContent = res.error;
+        btn.disabled = false;
+        btn.textContent = 'Send feedback';
+      }
+      return;
+    }
     const f = new FormData(e.target);
     const score = Number(f.get('score'));
     if (!(score >= 0 && score <= 100)) return;

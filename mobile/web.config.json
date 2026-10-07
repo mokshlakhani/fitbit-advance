@@ -1,3 +1,7 @@
 {
-  "googleClientId": "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleusercontent.com"
+  "googleClientId": "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleusercontent.com",
+  "feedback": {
+    "formUrl": "https://docs.google.com/forms/d/e/1FAIpQLSe_d2Xn4U6HhXKK5zdhg2rBv1GlSFXBAFuhQEs61SSvBf4Q9A/formResponse",
+    "fields": { "message": "entry.1851034367", "contact": "entry.935902674", "context": "entry.2051203888" }
+  }
 }
