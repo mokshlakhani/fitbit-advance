@@ -149,7 +149,7 @@ async function signIn() {
     await store.set('signedIn', true);
     await runSync();
   } catch (err) {
-    setUi('error', '', err.code === 'CANCELED' ? 'Sign-in was cancelled.' : String(err.message || err));
+    setUi('error', '', err.code === 'CANCELED' ? 'Sign-in was cancelled.' : failed('Sign-in failed. Try again.', err));
   }
 }
 
@@ -173,6 +173,15 @@ async function refreshSilently() {
   await webauth.refreshSilently();
 }
 
+// People see a short message; the technical detail goes to the console and
+// is attached to feedback and crash reports (lastError) for fixing.
+let lastError = '';
+function failed(message, detail) {
+  lastError = String(detail && detail.message ? detail.message : detail || '').slice(0, 600);
+  if (lastError) console.warn(message, lastError);
+  return message;
+}
+
 // ---------- Sync ----------
 // `background`: the 5-minute timer. The web app's Google pass lasts an hour and
 // renewing it means a trip to Google and back, so a background sync never does
@@ -186,7 +195,7 @@ async function runSync({ background = false } = {}) {
         if (background) return;
         if (document.visibilityState === 'visible' && silentRefreshAllowed()) {
           setUi('syncing', 'Refreshing Google sign-in');
-          await refreshSilently().catch(e => setUi('error', '', String(e.message || e)));
+          await refreshSilently().catch(e => setUi('error', '', failed('Sign-in failed. Try again.', e)));
         } else {
           setUi('signedOut', '', 'Google sign-in has expired. Sign in again to sync.');
         }
@@ -209,19 +218,19 @@ async function runSync({ background = false } = {}) {
       }
       const seconds = (performance.now() - t0) / 1000;
       await store.set('lastSyncSeconds', seconds);
-      if (report.errors.length) setUi('error', '', `Some data didn’t download: ${report.errors[0]}`, '');
+      if (report.errors.length) setUi('error', '', failed('Some data didn’t download.', report.errors.join('\n')), '');
       else setUi('idle', '', '', '');
       runHistory(historyDays);
     } catch (err) {
       if (err.code === 'NEEDS_REDIRECT' && background) {
         // Leave it for the next open, return or ↻.
       } else if (err.code === 'NEEDS_REDIRECT' && silentRefreshAllowed() && document.visibilityState === 'visible') {
-        await refreshSilently().catch(e => setUi('error', '', String(e.message || e)));
+        await refreshSilently().catch(e => setUi('error', '', failed('Sign-in failed. Try again.', e)));
       } else if (['NEEDS_CONSENT', 'NEEDS_REDIRECT'].includes(err.code) || err.status === 401 || err.status === 403) {
         await store.set('signedIn', false);
         setUi('signedOut', '', 'Google sign-in has expired. Sign in again to keep syncing.');
       } else {
-        setUi('error', '', String(err.message || err));
+        setUi('error', '', failed('Sync failed. Try again.', err));
       }
     } finally {
       syncing = null;
@@ -261,7 +270,7 @@ async function importTakeoutFiles(files) {
     await recomputeAndShow();
     setUi('idle', '', '', `Imported VO₂ max for ${n} days.`);
   } catch (err) {
-    setUi('error', '', `Couldn’t read that file: ${err.message || err}`);
+    setUi('error', '', failed('Couldn’t read that file.', err));
   }
 }
 
@@ -324,7 +333,7 @@ function feedbackContext() {
     : /iphone|ipad/i.test(navigator.userAgent) ? (navigator.standalone ? 'iPhone home-screen app' : 'iPhone Safari')
       : /android/i.test(navigator.userAgent) ? 'Android browser' : 'Browser';
   const page = (location.hash.split('?')[0] || '#/').slice(1) || '/';
-  return `v${v} · ${platform} · page ${page} · storage ${storageNote} · ${new Date().toISOString()}`;
+  return `v${v} · ${platform} · page ${page} · storage ${storageNote} · ${new Date().toISOString()}${lastError ? ` · last error: ${lastError.replace(/\s+/g, ' ').slice(0, 300)}` : ''}`;
 }
 
 async function sendFeedback(form) {

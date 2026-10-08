@@ -174,6 +174,9 @@ async function syncHeartRateDay(api, day) {
   const prev = await store.get(`hr:${day}`);
   const lastSec = prev && prev.t.length ? prev.t[prev.t.length - 1] : null;
   const from = lastSec === null ? start : start + (lastSec + 1) * 1000;
+  // Nothing left to ask for: the day's last second is already stored (Google
+  // rejects an empty range), or the range starts in the future.
+  if (from >= end || from > Date.now()) return 0;
   const points = await api.list('heart-rate',
     `heart_rate.sample_time.physical_time >= "${rfc(from)}" AND heart_rate.sample_time.physical_time < "${rfc(end)}"`);
   if (prev && !points.length) return 0;
