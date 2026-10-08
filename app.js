@@ -2144,9 +2144,95 @@ function renderTabbar() {
   const r = state.route;
   const active = r.page === 'home' ? 'today' : r.page === 'workout' ? 'strain' : (TABS.find(t => t.keys.includes(r.key)) || {}).id;
   const iso = day().date;
-  bar.innerHTML = TABS.map(t => `<a href="${t.href(iso)}" class="tab ${t.id === active ? 'on' : ''} ${t.id === active && lastTab !== null && lastTab !== active ? 'pop' : ''}" ${t.id === active ? 'aria-current="page"' : ''} style="--accent:${t.id === 'today' ? 'var(--text)' : t.id === 'recovery' ? 'var(--good)' : GROUPS[t.id === 'strain' ? 'activity' : t.id].color}">
+  const accentOf = t => (t.id === 'today' ? 'var(--text)' : t.id === 'recovery' ? 'var(--good)' : GROUPS[t.id === 'strain' ? 'activity' : t.id].color);
+  bar.innerHTML = '<span class="tab-ind" aria-hidden="true"></span>' + TABS.map(t => `<a href="${t.href(iso)}" class="tab ${t.id === active ? 'on' : ''} ${t.id === active && lastTab !== null && lastTab !== active ? 'pop' : ''}" ${t.id === active ? 'aria-current="page"' : ''} data-tab="${t.id}" style="--accent:${accentOf(t)}">
       <span class="tab-icon">${ph(t.icon, '', t.id === active ? 'fill' : 'regular')}</span><span class="tab-label">${t.label}</span></a>`).join('');
+  const moved = lastTab !== null && lastTab !== active;
   lastTab = active;
+  placeTabIndicator(bar, bar.querySelector('.tab.on'), { animate: moved });
+  if (!bar.dataset.swipe) { bar.dataset.swipe = '1'; bindTabSwipe(bar); }
+}
+
+// One highlight pill for the whole bar, placed on the active tab's icon by
+// measuring it, so it's always exactly centred. It slides between tabs.
+let tabIndX = null;
+function placeTabIndicator(bar, tab, { animate = false, x = null } = {}) {
+  const ind = bar.querySelector('.tab-ind');
+  if (!ind) return;
+  if (!tab && x === null) { ind.style.opacity = '0'; return; }
+  // Positions are relative to the bar's padding box (inside its border).
+  let cx = x;
+  if (cx === null) {
+    // Layout offsets, not the on-screen box: the icon may be mid "pop"
+    // animation (scaled and nudged down) at this moment.
+    const iconEl = tab.querySelector('.tab-icon');
+    cx = tab.offsetLeft + iconEl.offsetLeft + iconEl.offsetWidth / 2;
+    ind.style.top = `${tab.offsetTop + iconEl.offsetTop}px`;
+    ind.style.setProperty('--accent', tab.style.getPropertyValue('--accent'));
+  } else {
+    cx -= bar.clientLeft;
+  }
+  const at = v => `translateX(${(v - ind.offsetWidth / 2).toFixed(1)}px)`;
+  const slide = animate && tabIndX !== null;
+  // The bar is re-rendered on every page change, so a new pill first takes
+  // the old one's place and then slides to the new tab.
+  if (slide && !ind.style.transform) {
+    ind.classList.remove('slide');
+    ind.style.transform = at(tabIndX);
+    void ind.offsetWidth;
+  }
+  ind.style.opacity = '1';
+  ind.classList.toggle('slide', slide);
+  ind.style.transform = at(cx);
+  tabIndX = cx;
+}
+
+// Slide a finger along the bar: the highlight follows it and the tab under it
+// lights up; lifting the finger opens that tab. A plain tap works as before.
+function bindTabSwipe(bar) {
+  let s = null;
+  const tabAt = x => [...bar.querySelectorAll('.tab')].reduce((best, t) => {
+    const b = t.getBoundingClientRect();
+    const d = Math.abs(b.left + b.width / 2 - x);
+    return !best || d < best.d ? { t, d } : best;
+  }, null).t;
+  const hover = t => bar.querySelectorAll('.tab').forEach(x => x.classList.toggle('near', x === t));
+  bar.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    s = { startX: e.clientX, moved: false, tab: null, id: e.pointerId };
+  });
+  bar.addEventListener('pointermove', e => {
+    if (!s || e.pointerId !== s.id) return;
+    if (!s.moved && Math.abs(e.clientX - s.startX) < 8) return;
+    if (!s.moved) { s.moved = true; try { bar.setPointerCapture(e.pointerId); } catch {} }
+    const barBox = bar.getBoundingClientRect();
+    const tabs = bar.querySelectorAll('.tab');
+    const first = tabs[0].getBoundingClientRect(), last = tabs[tabs.length - 1].getBoundingClientRect();
+    const x = Math.min(Math.max(e.clientX, first.left + first.width / 2), last.left + last.width / 2);
+    const t = tabAt(x);
+    if (t !== s.tab) {
+      s.tab = t;
+      hover(t);
+      bar.querySelector('.tab-ind').style.setProperty('--accent', t.style.getPropertyValue('--accent'));
+    }
+    placeTabIndicator(bar, null, { x: x - barBox.left });
+  });
+  const end = e => {
+    if (!s || e.pointerId !== s.id) return;
+    const { moved, tab } = s;
+    s = null;
+    hover(null);
+    if (!moved) return;
+    // A slide ends on a tab: open it (and swallow the click that follows).
+    addEventListener('click', block, { capture: true, once: true });
+    setTimeout(() => removeEventListener('click', block, { capture: true }), 400);
+    if (tab && !tab.classList.contains('on')) go(tab.getAttribute('href'));
+    else placeTabIndicator(bar, bar.querySelector('.tab.on'), { animate: true });
+  };
+  const block = e => { e.stopPropagation(); e.preventDefault(); };
+  bar.addEventListener('pointerup', end);
+  bar.addEventListener('pointercancel', end);
+  addEventListener('resize', () => placeTabIndicator(bar, bar.querySelector('.tab.on')));
 }
 
 // ---------- Render ----------

@@ -1295,3 +1295,22 @@ body.log-open .log-fab { opacity: 0; pointer-events: none; }
   .date-btn { min-width: 0; overflow: hidden; }
   #dateText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Tab bar: one highlight pill, measured onto the active icon (app.js
+   placeTabIndicator), that slides between tabs and follows a finger dragged
+   along the bar. The per-tab background is no longer drawn. */
+.tabbar { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.tab-ind {
+  position: absolute; left: 0; top: 13px; z-index: 0;
+  width: 44px; height: 26px; border-radius: var(--pill);
+  background: color-mix(in srgb, var(--accent, var(--text)) 20%, transparent);
+  opacity: 0; pointer-events: none;
+  will-change: transform;
+  transition: background-color 200ms var(--ease), opacity 200ms var(--ease);
+}
+.tab-ind.slide { transition: transform 420ms var(--settle), background-color 200ms var(--ease), opacity 200ms var(--ease); }
+.tab { z-index: 1; }
+.tab.on .tab-icon { background: transparent; }
+.tab.near { color: var(--text); }
+.tab.near .tab-icon { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .tab-ind.slide { transition: none; } }
