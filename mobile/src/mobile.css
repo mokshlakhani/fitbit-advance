@@ -176,3 +176,9 @@ body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none;
 }
 .feedback-btn[hidden] { display: none; }
 .feedback-btn:active { transform: scale(0.94); }
+
+/* Top-bar icons without circles: just the glyph, with the full tap area kept.
+   Feedback stays recognisable by its blue speech bubble. */
+.sync-btn, .feedback-btn { background: transparent; border-color: transparent; }
+.feedback-btn { color: var(--strain); }
+.sync-btn svg, .feedback-btn svg { width: 22px; height: 22px; }
