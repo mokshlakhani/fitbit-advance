@@ -104,9 +104,11 @@ body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none;
   .m-panel, .m-scrim { transition: none; }
 }
 
-/* The desktop header drops its third column on narrow screens; the app keeps it for the sync button. */
+/* The desktop header drops its third column on narrow screens; the app keeps
+   it for the feedback and sync buttons. Equal side columns keep the date pill
+   centred (styles.css sets --side to the buttons' width). */
 @media (max-width: 720px) {
-  .bar-inner { grid-template-columns: auto 1fr auto; }
+  .bar-inner { grid-template-columns: minmax(var(--side, 76px), 1fr) minmax(0, auto) minmax(var(--side, 76px), 1fr); }
 }
 
 .m-field { display: grid; gap: 6px; font-size: 0.875rem; color: var(--text-2); }

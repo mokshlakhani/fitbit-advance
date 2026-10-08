@@ -1284,3 +1284,14 @@ body.log-open .log-fab { opacity: 0; pointer-events: none; }
 .week .wday { transition: background-color 200ms var(--ease), border-color 200ms var(--ease); }
 .page-error p { margin: 0; }
 .page-error-detail { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--card-2); color: var(--text-3); font-size: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
+
+/* Phone header: equal side columns so the date pill sits in the true centre.
+   Both sides are at least as wide as the right-hand buttons (feedback + sync);
+   on narrow phones the pill shrinks and its text truncates rather than overlap. */
+@media (max-width: 720px) {
+  .bar-inner { --side: 76px; grid-template-columns: minmax(var(--side), 1fr) minmax(0, auto) minmax(var(--side), 1fr); }
+  .brand { justify-self: start; }
+  .date-nav { justify-self: center; max-width: 100%; min-width: 0; }
+  .date-btn { min-width: 0; overflow: hidden; }
+  #dateText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
