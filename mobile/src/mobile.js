@@ -654,8 +654,26 @@ async function resumePendingWrite() {
   }
 }
 
+// Error reports from a page that failed to draw: the error text only.
+async function sendReport(text) {
+  const cfg = (await appConfig()).feedback;
+  if (!cfg) return false;
+  const body = new URLSearchParams({
+    [cfg.fields.message]: `[Crash] ${text}`.slice(0, 1800),
+    [cfg.fields.contact]: '',
+    [cfg.fields.context]: feedbackContext(),
+  });
+  try {
+    await fetch(cfg.formUrl, { method: 'POST', mode: 'no-cors', body });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 window.DataStrapHost = {
   dayHeartRate,
+  sendReport,
   logWorkout: entry => runWrite({ kind: 'log', entry }),
   deleteWorkout: id => runWrite({ kind: 'delete', id }),
   async load() {

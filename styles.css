@@ -1282,3 +1282,5 @@ body.log-open .log-fab { opacity: 0; pointer-events: none; }
 /* The strip's days follow the scroll position directly: no eased transition on
    transform (left from tap feedback), which made the fallback path wobble. */
 .week .wday { transition: background-color 200ms var(--ease), border-color 200ms var(--ease); }
+.page-error p { margin: 0; }
+.page-error-detail { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--card-2); color: var(--text-3); font-size: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }

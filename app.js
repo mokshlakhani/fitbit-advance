@@ -2151,6 +2151,30 @@ function renderTabbar() {
 
 // ---------- Render ----------
 let renders = 0;
+// A page that fails to draw shows what happened and, in the phone app, lets
+// the person send the technical error (no health data) to the feedback Sheet.
+function showPageError(main, error) {
+  const route = (location.hash.split('?')[0] || '#/').slice(1);
+  const report = `${error && error.name}: ${error && error.message}\nroute ${route}\n${String(error && error.stack || '').split('\n').slice(0, 6).join('\n')}`;
+  console.error(error);
+  const canSend = window.DataStrapHost && window.DataStrapHost.sendReport;
+  main.innerHTML = `<section class="panel page-error">
+      <div class="panel-title"><span class="label">Couldn’t show this page</span></div>
+      <p>Something in your data tripped up this page. Other tabs still work.</p>
+      ${canSend ? `<p class="note">Send a report so it can be fixed. It includes only the technical error, not your health data.</p>
+      <button type="button" class="log-save" data-send-report>Send report</button>` : ''}
+      <pre class="page-error-detail">${esc(report)}</pre>
+    </section>`;
+  const btn = main.querySelector('[data-send-report]');
+  if (btn) btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    const ok = await window.DataStrapHost.sendReport(report).catch(() => false);
+    btn.textContent = ok ? 'Report sent. Thank you.' : 'Couldn’t send. Try again.';
+    if (!ok) btn.disabled = false;
+  });
+}
+
 function render({ pageEnter = false } = {}) {
   renders++;
   const d = day();
@@ -2164,7 +2188,13 @@ function render({ pageEnter = false } = {}) {
   charts = {};
   const main = $('#main');
   const page = state.route.page;
-  main.innerHTML = page === 'home' ? renderHome() : page === 'workout' ? renderWorkout() : renderDetail();
+  try {
+    main.innerHTML = page === 'home' ? renderHome() : page === 'workout' ? renderWorkout() : renderDetail();
+  } catch (error) {
+    showPageError(main, error);
+    renderTabbar();
+    return;
+  }
   document.title = page === 'home' ? 'DataStrap'
     : page === 'workout' ? `${day().strain.workouts[state.route.index].name} · DataStrap` : `${M[state.route.key].label} · DataStrap`;
   if (pageEnter && !reducedMotion) {
@@ -2173,8 +2203,13 @@ function render({ pageEnter = false } = {}) {
     main.classList.add(state.route.page === 'home' ? 'enter' : 'enter-detail');
   }
   renderTabbar();
-  placeStrip(main);
-  mountCharts(main, true);
+  try {
+    placeStrip(main);
+    mountCharts(main, true);
+  } catch (error) {
+    showPageError(main, error);
+    return;
+  }
   hydrateHeartDetail(main);
   animateNumbers(main);
   // Rings start empty and sweep to their value on the next frame.
