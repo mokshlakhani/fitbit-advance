@@ -1315,14 +1315,41 @@ body.log-open .log-fab { opacity: 0; pointer-events: none; }
 .tab.near .tab-icon { color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .tab-ind.slide { transition: none; } }
 
-/* Tab bar: more translucent frosted glass on phones (Android and iPhone).
-   A stronger blur keeps content scrolling underneath from competing with the
-   icons; the bar is small, so the blur stays cheap to composite. */
-@media (max-width: 720px) {
-  .tabbar, html.ios .tabbar {
-    background: rgba(18, 19, 23, 0.52);
-    -webkit-backdrop-filter: saturate(180%) blur(26px);
-    backdrop-filter: saturate(180%) blur(26px);
-    border-color: rgba(255, 255, 255, 0.12);
-  }
+/* ---------- Frosted glass: one look for all floating chrome ----------
+   Top bar, date pill, tab bar, Log + and toasts share these tokens so they
+   read as one material. The blur is strong enough that content scrolling
+   underneath never competes with icons or text. */
+:root {
+  --glass: rgba(18, 19, 23, 0.52);
+  --glass-bar: rgba(8, 9, 11, 0.5);
+  --glass-tint: rgba(255, 255, 255, 0.06);
+  --glass-edge: rgba(255, 255, 255, 0.12);
+  --glass-blur: saturate(180%) blur(26px);
 }
+.bar, html.ios .bar {
+  background: var(--glass-bar);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.bar.scrolled { border-bottom-color: var(--glass-edge); }
+/* The pill sits on the frosted bar, so it's a lighter tint of the same glass
+   (a second blur inside a blurred bar adds cost and little else). */
+.date-nav { background: var(--glass-tint); border-color: var(--glass-edge); }
+.tabbar, html.ios .tabbar, .toast {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-edge);
+}
+.log-fab {
+  background: var(--glass);
+  color: var(--text);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), inset 0 0 0 1px var(--glass-edge);
+}
+@media (max-width: 720px) {
+  .bar, html.ios .bar { background: var(--glass-bar); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .tabbar, html.ios .tabbar { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-color: var(--glass-edge); }
+}
+
