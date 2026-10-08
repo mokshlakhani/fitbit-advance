@@ -1314,3 +1314,15 @@ body.log-open .log-fab { opacity: 0; pointer-events: none; }
 .tab.near { color: var(--text); }
 .tab.near .tab-icon { color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .tab-ind.slide { transition: none; } }
+
+/* Tab bar: more translucent frosted glass on phones (Android and iPhone).
+   A stronger blur keeps content scrolling underneath from competing with the
+   icons; the bar is small, so the blur stays cheap to composite. */
+@media (max-width: 720px) {
+  .tabbar, html.ios .tabbar {
+    background: rgba(18, 19, 23, 0.52);
+    -webkit-backdrop-filter: saturate(180%) blur(26px);
+    backdrop-filter: saturate(180%) blur(26px);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+}
