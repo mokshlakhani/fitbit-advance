@@ -13,7 +13,9 @@ import re
 from datetime import datetime, timedelta
 
 GAMMA = math.log(2) / 8.0          # Gompertz: age-related mortality doubles every ~8 years
-WINDOW_DAYS = 90
+WINDOW_DAYS = 180                  # six months, like WHOOP Age
+UPDATE_WEEKDAY = 0                 # recomputed on Mondays and held for the week
+MIN_RECOVERIES, RECOVERY_SPAN = 21, 31  # nights with a recovery score needed in the last 31 days
 MIN_DAYS = 14
 FLOOR = 17.0
 PACE_SHORT, PACE_LONG, PACE_MIN_HISTORY = 30, 180, 90
@@ -319,22 +321,55 @@ def body_age_for_day(records, i, profile, pairs, window=WINDOW_DAYS, with_detail
     return out
 
 
+def _calibrating(age, missing, recoveries=None):
+    return {'status': 'calibrating', 'value': None, 'delta': None, 'raw_delta': None, 'chronological': age,
+            'sigma': None, 'pace': None, 'pace_change': None, 'missing': missing, 'floored': False,
+            'drivers': [], 'levers': [], 'recoveries': recoveries}
+
+
+def _recoveries(records, i):
+    lo = max(0, i - RECOVERY_SPAN + 1)
+    return sum(1 for r in records[lo:i + 1] if (r.get('recovery') or {}).get('score') is not None)
+
+
+def weekly_value(records, i, profile, pairs, first):
+    """Body age and pace as of day i (a Monday), or a calibrating result."""
+    ba = body_age_for_day(records, i, profile, pairs)
+    if ba is None:
+        return None
+    n = _recoveries(records, i)
+    if ba['status'] == 'ok' and n < MIN_RECOVERIES:
+        return _calibrating(ba['chronological'], [], n)
+    if ba['status'] == 'ok':
+        span = (datetime.strptime(records[i]['date'], '%Y-%m-%d') - first).days + 1
+        if span >= PACE_MIN_HISTORY:
+            long_w = min(PACE_LONG, span)
+            short = body_age_for_day(records, i, profile, pairs, PACE_SHORT, with_detail=False)
+            longb = body_age_for_day(records, i, profile, pairs, long_w, with_detail=False)
+            if short and longb and short['status'] == 'ok' and longb['status'] == 'ok':
+                dt = (long_w - PACE_SHORT) / 2.0 / 365.0
+                change = short['raw_delta'] - longb['raw_delta']
+                pace = 1.0 if abs(change) < PACE_DEADBAND else 1.0 + change / dt
+                ba['pace'] = round(min(3.0, max(-1.0, pace)), 1)
+                ba['pace_change'] = round(change, 1)
+    return ba
+
+
 def apply(records, profile):
-    """Fill record['bio_age'] for every day; pace from the last 30 vs 180 days."""
+    """Fill record['bio_age'] for every day. Like WHOOP Age it moves slowly: the
+    value (180-day window) and pace (30 vs 180 days) are worked out each Monday
+    and held for the week; a Monday short of 21 recovery nights in 31 days keeps
+    the last good value. `updated` is the Monday it's from."""
     pairs = sleep_pairs(records)
     first = datetime.strptime(records[0]['date'], '%Y-%m-%d') if records else None
+    current, updated = None, None
     for i, r in enumerate(records):
-        ba = body_age_for_day(records, i, profile, pairs)
-        if ba and ba['status'] == 'ok':
-            span = (datetime.strptime(r['date'], '%Y-%m-%d') - first).days + 1
-            if span >= PACE_MIN_HISTORY:
-                long_w = min(PACE_LONG, span)
-                short = body_age_for_day(records, i, profile, pairs, PACE_SHORT, with_detail=False)
-                longb = body_age_for_day(records, i, profile, pairs, long_w, with_detail=False)
-                if short and longb and short['status'] == 'ok' and longb['status'] == 'ok':
-                    dt = (long_w - PACE_SHORT) / 2.0 / 365.0
-                    change = short['raw_delta'] - longb['raw_delta']
-                    pace = 1.0 if abs(change) < PACE_DEADBAND else 1.0 + change / dt
-                    ba['pace'] = round(min(3.0, max(-1.0, pace)), 1)
-                    ba['pace_change'] = round(change, 1)
-        r['bio_age'] = ba
+        if datetime.strptime(r['date'], '%Y-%m-%d').weekday() == UPDATE_WEEKDAY:
+            ba = weekly_value(records, i, profile, pairs, first)
+            if ba is not None and (ba['status'] == 'ok' or current is None or current['status'] != 'ok'):
+                current, updated = ba, r['date']
+        if current is None:
+            age = profile.get('chronological_age')
+            r['bio_age'] = None if age is None else dict(_calibrating(age, [], _recoveries(records, i)), updated=None)
+        else:
+            r['bio_age'] = dict(current, updated=updated)

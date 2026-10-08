@@ -74,6 +74,7 @@ Git-ignored, per user: `profile.json`, `google_tokens.json`, `credentials.json` 
 - Physiological age from eight drivers compared with a typical peer of the same age and sex: VO₂ max, resting HR, daily steps, zone minutes, strength training, sleep length, sleep regularity (SRI) and BMI. Each published all-cause-mortality effect is converted to years with ln(HR)/γ, where γ = ln 2 / 8 (Gompertz).
 - Discounts: under 30, effects from older adults count at 0.7 (VO₂ max at 1.0). Overlap groups: activity × 0.5, sleep × 0.8, resting HR × 0.6, BMI × 0.5.
 - Shown with one decimal, floor 17, cap ±8 years under 30 (±10 from 30), and a ± range (model error 3 years under 30, 2 from 30).
+- Like WHOOP Age, it moves slowly: drivers are averaged over the last 180 days, and the value and pace are worked out each Monday (`UPDATE_WEEKDAY`) and held for the week; each day's `bio_age.updated` is that Monday. A Monday needs a recovery score on 21 of the last 31 nights (`MIN_RECOVERIES`), otherwise the last good value carries on ("Calibrating" before the first).
 - Needs 3 or more drivers with 14 days of data, including VO₂ max or resting HR; otherwise "Calibrating".
 - Pace: the 30-day against the 180-day body age, with a 0.3-year dead band. Needs 90 days of history.
 - Mirrored exactly in `mobile/src/engine.js` (`applyBodyAge`); `mobile/test/synthetic_parity.mjs` covers women, unknown sex, age 45 and pace.

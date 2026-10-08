@@ -16,7 +16,7 @@ const AUTO_SYNC_MS = 5 * 60 * 1000;
 const SILENT_REDIRECT_GAP_MS = 10 * 60 * 1000;
 // Bump when engine.js changes what it computes, so phones recompute instead of
 // showing a cached dashboard from the old version.
-const ENGINE_VERSION = 9;
+const ENGINE_VERSION = 10;
 
 const cap = window.Capacitor;
 const NATIVE = Boolean(cap?.isNativePlatform?.());

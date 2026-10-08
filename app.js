@@ -1528,8 +1528,10 @@ function bioAgeDetail(d, idx) {
   const b = d.bio_age;
   if (!b) return '<p class="empty">Body age needs your age in your Google Health profile.</p>';
   if (b.status !== 'ok') {
-    return `<p class="empty">Calibrating: body age needs at least three measures with enough data (14 days each), including VO₂ max or resting heart rate.${b.missing.length ? ` Still waiting on: ${esc(b.missing.join(', '))}.` : ''}</p>`;
+    const nights = isNum(b.recoveries) ? ` You have ${b.recoveries} of the 21 nights with a recovery score it needs in the last month.` : '';
+    return `<p class="empty">Calibrating. Body age updates once a week, on Mondays, from the last six months. It needs a recovery score on 21 nights in a month, and at least three measures (including VO₂ max or resting heart rate).${nights}${b.missing.length ? ` Still waiting on: ${esc(b.missing.join(', '))}.` : ''}</p>`;
   }
+  const updated = b.updated ? `<p class="note">Updated ${esc(fmtDate(b.updated, { weekday: 'long', month: 'short', day: 'numeric' }))} from the last six months of data. Body age moves slowly on purpose and updates every Monday; pace shows how your last 30 days compare.</p>` : '';
   const maxY = Math.max(0.5, ...b.drivers.map(x => Math.abs(x.years)));
   const rows = b.drivers.map(x => {
     const cls = x.years < -0.05 ? 'good' : x.years > 0.05 ? 'poor' : '';
@@ -1554,7 +1556,7 @@ function bioAgeDetail(d, idx) {
       color: 'var(--body)', tips: win.map((i, k) => `<b>${isNum(vals[k]) ? fmt(vals[k], 1) : '--'}</b><span>${longDate(days()[i].date)}</span>`),
       hrefs: win.map(i => hrefMetric('bioAge', 'day', days()[i].date)), selPos: vals.length - 1, H: 170, dots: false, baseline: b.chronological }))
     : '';
-  return `<div class="headline-label">What’s moving it (years vs a typical ${b.chronological}-year-old)</div><div class="rows">${rows}</div>
+  return `${updated}<div class="headline-label">What’s moving it (years vs a typical ${b.chronological}-year-old)</div><div class="rows">${rows}</div>
     <p class="note">Positive years add to your body age, negative years take away. Activity measures count at half weight together and sleep measures at 80%, so overlapping habits aren’t counted twice.</p>
     ${levers}${trend}`;
 }

@@ -672,7 +672,9 @@ export function applySleepScore(records, labels) {
 
 // ---------- Body age (port of body_age.py; design: docs/BODY_AGE_DESIGN.md) ----------
 const BA_GAMMA = Math.log(2) / 8.0;
-const BA_WINDOW = 90;
+const BA_WINDOW = 180; // six months, like WHOOP Age
+const BA_UPDATE_WEEKDAY = 1; // Monday (JS getUTCDay); recomputed then and held for the week
+const BA_MIN_RECOVERIES = 21, BA_RECOVERY_SPAN = 31;
 const BA_MIN_DAYS = 14;
 const BA_FLOOR = 17.0;
 const PACE_SHORT = 30;
@@ -893,26 +895,56 @@ function bodyAgeForDay(records, i, profile, pairs, window = BA_WINDOW, withDetai
 }
 
 /** Fill record.bio_age for every day; pace from the last 30 vs 180 days (body_age.apply). */
+// See _calibrating, _recoveries, weekly_value and apply in body_age.py.
+function baCalibrating(age, missing, recoveries = null) {
+  return { status: 'calibrating', value: null, delta: null, raw_delta: null, chronological: age,
+    sigma: null, pace: null, pace_change: null, missing, floored: false, drivers: [], levers: [], recoveries };
+}
+
+function baRecoveries(records, i) {
+  let n = 0;
+  for (let j = Math.max(0, i - BA_RECOVERY_SPAN + 1); j <= i; j++) if (records[j].recovery?.score != null) n++;
+  return n;
+}
+
+function baWeekly(records, i, profile, pairs, first) {
+  const ba = bodyAgeForDay(records, i, profile, pairs);
+  if (!ba) return null;
+  const n = baRecoveries(records, i);
+  if (ba.status === 'ok' && n < BA_MIN_RECOVERIES) return baCalibrating(ba.chronological, [], n);
+  if (ba.status === 'ok') {
+    const span = Math.round((Date.parse(`${records[i].date}T00:00:00Z`) - first) / 86400000) + 1;
+    if (span >= PACE_MIN_HISTORY) {
+      const longW = Math.min(PACE_LONG, span);
+      const short = bodyAgeForDay(records, i, profile, pairs, PACE_SHORT, false);
+      const longb = bodyAgeForDay(records, i, profile, pairs, longW, false);
+      if (short && longb && short.status === 'ok' && longb.status === 'ok') {
+        const dt = (longW - PACE_SHORT) / 2.0 / 365.0;
+        const change = short.raw_delta - longb.raw_delta;
+        const pace = Math.abs(change) < PACE_DEADBAND ? 1.0 : 1.0 + change / dt;
+        ba.pace = pyRound(Math.min(3.0, Math.max(-1.0, pace)), 1);
+        ba.pace_change = pyRound(change, 1);
+      }
+    }
+  }
+  return ba;
+}
+
 export function applyBodyAge(records, profile) {
   const pairs = sleepPairs(records);
   const first = records.length ? Date.parse(`${records[0].date}T00:00:00Z`) : null;
+  let current = null;
+  let updated = null;
   records.forEach((r, i) => {
-    const ba = bodyAgeForDay(records, i, profile, pairs);
-    if (ba && ba.status === 'ok') {
-      const span = Math.round((Date.parse(`${r.date}T00:00:00Z`) - first) / 86400000) + 1;
-      if (span >= PACE_MIN_HISTORY) {
-        const longW = Math.min(PACE_LONG, span);
-        const short = bodyAgeForDay(records, i, profile, pairs, PACE_SHORT, false);
-        const longb = bodyAgeForDay(records, i, profile, pairs, longW, false);
-        if (short && longb && short.status === 'ok' && longb.status === 'ok') {
-          const dt = (longW - PACE_SHORT) / 2.0 / 365.0;
-          const change = short.raw_delta - longb.raw_delta;
-          const pace = Math.abs(change) < PACE_DEADBAND ? 1.0 : 1.0 + change / dt;
-          ba.pace = pyRound(Math.min(3.0, Math.max(-1.0, pace)), 1);
-          ba.pace_change = pyRound(change, 1);
-        }
-      }
+    if (new Date(`${r.date}T00:00:00Z`).getUTCDay() === BA_UPDATE_WEEKDAY) {
+      const ba = baWeekly(records, i, profile, pairs, first);
+      if (ba && (ba.status === 'ok' || current === null || current.status !== 'ok')) { current = ba; updated = r.date; }
     }
-    r.bio_age = ba;
+    if (current === null) {
+      const age = profile.chronological_age;
+      r.bio_age = age == null ? null : { ...baCalibrating(age, [], baRecoveries(records, i)), updated: null };
+    } else {
+      r.bio_age = { ...current, updated };
+    }
   });
 }
