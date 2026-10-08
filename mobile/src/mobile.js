@@ -337,7 +337,26 @@ async function sendFeedback(form) {
   }
 }
 
-async function renderSheet() {
+async function feedbackHtml() {
+  if (!(await appConfig()).feedback) return '';
+  return `
+    <h2 class="m-title">Send feedback</h2>
+    <p class="m-note">Found a bug or have an idea? It goes straight to the person who runs DataStrap. Only what you write here is sent, with the app version and page you’re on.</p>
+    <form class="m-feedback" data-form="feedback" novalidate>
+      <div class="m-seg" role="radiogroup" aria-label="Kind of feedback">
+        ${['Bug', 'Idea', 'Other'].map((k, i) => `<label><input type="radio" name="kind" value="${k}" ${i === 0 ? 'checked' : ''}><span>${k}</span></label>`).join('')}
+      </div>
+      <label class="m-field"><span>Message</span>
+        <textarea class="m-input" name="message" id="feedbackMessage" rows="4" maxlength="2000" placeholder="What happened, or what would you like?"></textarea></label>
+      <label class="m-field"><span>Name or email <small>(optional, if you’d like a reply)</small></span>
+        <input class="m-input" name="contact" id="feedbackContact" type="text" maxlength="120" autocomplete="email"></label>
+      <p class="m-note m-feedback-status" role="status"></p>
+      <button class="m-btn primary" type="submit">Send feedback</button>
+    </form>`;
+}
+
+let sheetMode = 'all'; // 'feedback' when opened from the feedback button
+async function renderSheet(mode = sheetMode) {
   const sheet = document.getElementById('syncSheet');
   const [signedIn, lastSync, lab, prof, vo2, lastSeconds, tempUnit] = [
     await store.get('signedIn'), await store.get('lastSync'), await labels(), await profile(),
@@ -348,6 +367,11 @@ async function renderSheet() {
     ? `<span class="m-spin"></span>${esc(ui.detail || 'Syncing')}`
     : signedIn ? `Last synced ${ago(lastSync)}${lastSeconds ? ` · took ${lastSeconds < 10 ? lastSeconds.toFixed(1) : Math.round(lastSeconds)} s` : ''}` : 'Not connected to Google';
   const sexOpt = (v, label) => `<option value="${v}" ${(prof.sex || '') === v ? 'selected' : ''}>${label}</option>`;
+  if (mode === 'feedback') {
+    sheet.querySelector('.m-body').innerHTML = await feedbackHtml();
+    sheet.querySelector('#feedbackMessage')?.focus({ preventScroll: true });
+    return;
+  }
   sheet.querySelector('.m-body').innerHTML = `
     <h2 class="m-title">Sync</h2>
     <p class="m-status">${status}</p>
@@ -388,29 +412,17 @@ async function renderSheet() {
     <label class="m-btn m-file">Import from Takeout<input type="file" accept=".zip,.json,application/zip,application/json" multiple data-field="takeout" hidden></label>
     <p class="m-note">${Object.keys(vo2).length ? `${Object.keys(vo2).length} days of VO₂ max imported.` : 'None imported yet.'}</p>
 
-    ${(await appConfig()).feedback ? `
-    <h2 class="m-title">Send feedback</h2>
-    <p class="m-note">Found a bug or have an idea? It goes straight to the person who runs DataStrap. Only what you write here is sent, with the app version and page you’re on.</p>
-    <form class="m-feedback" data-form="feedback" novalidate>
-      <div class="m-seg" role="radiogroup" aria-label="Kind of feedback">
-        ${['Bug', 'Idea', 'Other'].map((k, i) => `<label><input type="radio" name="kind" value="${k}" ${i === 0 ? 'checked' : ''}><span>${k}</span></label>`).join('')}
-      </div>
-      <label class="m-field"><span>Message</span>
-        <textarea class="m-input" name="message" id="feedbackMessage" rows="4" maxlength="2000" placeholder="What happened, or what would you like?"></textarea></label>
-      <label class="m-field"><span>Name or email <small>(optional, if you’d like a reply)</small></span>
-        <input class="m-input" name="contact" id="feedbackContact" type="text" maxlength="120" autocomplete="email"></label>
-      <p class="m-note m-feedback-status" role="status"></p>
-      <button class="m-btn primary" type="submit">Send feedback</button>
-    </form>` : ''}
+    ${await feedbackHtml()}
 
     ${signedIn ? '<button class="m-btn quiet" data-act="signout">Sign out of Google</button>' : ''}
   `;
 }
 
-function openSheet() {
+function openSheet(mode = 'all') {
   const sheet = document.getElementById('syncSheet');
   sheet.hidden = false;
   requestAnimationFrame(() => sheet.classList.add('open'));
+  sheetMode = typeof mode === 'string' ? mode : 'all';
   renderSheet();
 }
 
@@ -427,7 +439,22 @@ function mountUi() {
   btn.type = 'button';
   btn.className = 'icon-btn sync-btn';
   btn.innerHTML = ICON_SYNC;
-  avatar.replaceWith(btn);
+  // Feedback sits right next to sync: same size, its own speech-bubble icon
+  // and accent ring so it reads as "send feedback" at a glance.
+  const fb = document.createElement('button');
+  fb.id = 'feedbackBtn';
+  fb.type = 'button';
+  fb.className = 'icon-btn feedback-btn';
+  fb.setAttribute('aria-label', 'Send feedback');
+  fb.title = 'Send feedback';
+  fb.innerHTML = ph('feedback', '', 'bold');
+  fb.hidden = true;
+  appConfig().then(c => { fb.hidden = !c.feedback; });
+  fb.addEventListener('click', () => openSheet('feedback'));
+  const actions = document.createElement('div');
+  actions.className = 'm-actions';
+  actions.append(fb, btn);
+  avatar.replaceWith(actions);
   // app.js still sets the initials on #avatar; keep a detached one for it.
   avatar.style.display = 'none';
   document.body.appendChild(avatar);

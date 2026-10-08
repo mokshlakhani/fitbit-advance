@@ -24,6 +24,7 @@ NAMES = {
     'walk': 'person-simple-walk', 'hike': 'person-simple-hike', 'yoga': 'person-simple-tai-chi',
     'boxing': 'boxing-glove', 'tennis': 'tennis-ball', 'basketball': 'basketball', 'snow': 'snowflake',
     'dance': 'music-notes', 'chores': 'broom', 'boat': 'boat', 'ski': 'person-simple-ski',
+    'feedback': 'chat-circle-text',
 }
 WEIGHTS = {'regular': '', 'duotone': '-duotone', 'fill': '-fill', 'bold': '-bold'}
 

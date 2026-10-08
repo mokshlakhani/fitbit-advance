@@ -164,3 +164,13 @@ body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none;
 .m-seg input:checked + span { background: var(--raised); color: var(--text); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset; }
 .m-seg input:focus-visible + span { outline: 2px solid var(--strain); outline-offset: 2px; }
 .m-feedback-status:empty { display: none; }
+
+/* Feedback button, next to sync: same size, accent ring and speech bubble. */
+.m-actions { justify-self: end; display: flex; align-items: center; gap: 8px; }
+.feedback-btn {
+  background: color-mix(in srgb, var(--strain) 16%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--strain) 55%, transparent);
+  color: var(--strain);
+}
+.feedback-btn[hidden] { display: none; }
+.feedback-btn:active { transform: scale(0.94); }
