@@ -44,7 +44,10 @@ async function redirect({ silent, write = false }) {
   if (!id) throw Object.assign(new Error('This copy of DataStrap has no Google client ID set up (config.json).'), { code: 'NO_CLIENT' });
   const state = randomState();
   // Remember where the person was, to come back to the same page.
-  sessionStorage.setItem('ds-oauth', JSON.stringify({ state, hash: location.hash, silent }));
+  // localStorage, not sessionStorage: iOS can reopen a home-screen app fresh
+  // on the way back from Google, which loses sessionStorage and with it the
+  // returning sign-in.
+  localStorage.setItem('ds-oauth', JSON.stringify({ state, hash: location.hash, silent, at: Date.now() }));
   const q = new URLSearchParams({
     client_id: id,
     redirect_uri: redirectUri(),
@@ -63,9 +66,9 @@ async function redirect({ silent, write = false }) {
  * dashboard reads location.hash. Returns 'signed-in', 'needs-consent', 'error' or null.
  */
 export async function completeRedirect() {
-  const saved = sessionStorage.getItem('ds-oauth');
+  const saved = localStorage.getItem('ds-oauth');
   if (!saved || !/(^#|&)(access_token|error)=/.test(location.hash)) return null;
-  sessionStorage.removeItem('ds-oauth');
+  localStorage.removeItem('ds-oauth');
   const { state, hash, silent } = JSON.parse(saved);
   const p = new URLSearchParams(location.hash.slice(1));
   history.replaceState(null, '', location.pathname + location.search + (hash || ''));

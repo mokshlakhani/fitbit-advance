@@ -164,12 +164,12 @@ async function signOut() {
 // Google and straight back (no screen while still signed in to Google). At
 // most once every 10 minutes, so a problem can't cause a redirect loop.
 function silentRefreshAllowed() {
-  const last = Number(sessionStorage.getItem('ds-silent') || 0);
+  const last = Number(localStorage.getItem('ds-silent') || 0);
   return Date.now() - last > SILENT_REDIRECT_GAP_MS;
 }
 
 async function refreshSilently() {
-  sessionStorage.setItem('ds-silent', String(Date.now()));
+  localStorage.setItem('ds-silent', String(Date.now()));
   await webauth.refreshSilently();
 }
 
@@ -304,6 +304,17 @@ function viewedDate() {
 // friends need no account and the owner reads them in Google Forms or Sheets.
 // Only what the person types is sent, plus which app, page and version they're
 // on; no health data.
+// Whether the browser keeps this app's storage, and whether it was cleared,
+// for feedback and crash reports (helps explain "asked to sign in again").
+let storageNote = 'unknown';
+(async () => {
+  try {
+    const kept = navigator.storage?.persisted ? await navigator.storage.persisted() : null;
+    await store.get('signedIn');
+    storageNote = `${kept === null ? 'n/a' : kept ? 'kept' : 'not kept'}${store.wasWiped() ? ', was cleared' : ''}`;
+  } catch { storageNote = 'error'; }
+})();
+
 let appConfigPromise;
 const appConfig = () => (appConfigPromise ||= fetch('config.json').then(r => (r.ok ? r.json() : {})).catch(() => ({})));
 
@@ -313,7 +324,7 @@ function feedbackContext() {
     : /iphone|ipad/i.test(navigator.userAgent) ? (navigator.standalone ? 'iPhone home-screen app' : 'iPhone Safari')
       : /android/i.test(navigator.userAgent) ? 'Android browser' : 'Browser';
   const page = (location.hash.split('?')[0] || '#/').slice(1) || '/';
-  return `v${v} · ${platform} · page ${page} · ${new Date().toISOString()}`;
+  return `v${v} · ${platform} · page ${page} · storage ${storageNote} · ${new Date().toISOString()}`;
 }
 
 async function sendFeedback(form) {
