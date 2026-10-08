@@ -2417,6 +2417,9 @@ function bindChartScrub() {
 
 // ---------- Events ----------
 function bindEvents() {
+  // Bold chevrons on the date pill, matching the weight of the bar's icons.
+  $('#prevDay').innerHTML = ph('chevron-left', '', 'bold');
+  $('#nextDay').innerHTML = ph('chevron-right', '', 'bold');
   $('#prevDay').addEventListener('click', () => setDay(state.idx - 1));
   $('#nextDay').addEventListener('click', () => setDay(state.idx + 1));
   const picker = $('#datePicker');

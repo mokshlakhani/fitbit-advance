@@ -182,3 +182,12 @@ body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none;
 .sync-btn, .feedback-btn { background: transparent; border-color: transparent; }
 .feedback-btn { color: var(--strain); }
 .sync-btn svg, .feedback-btn svg { width: 22px; height: 22px; }
+
+/* Symmetrical phone header: feedback (left) · date · sync (right). Both side
+   columns hold one 34px button, so the date pill is centred. */
+.m-lead { justify-self: start; display: flex; align-items: center; }
+@media (max-width: 720px) {
+  .bar-inner { --side: 44px; }
+}
+.date-nav .icon-btn svg { width: 22px; height: 22px; }
+.date-nav .icon-btn:not(:disabled) { color: var(--text); }

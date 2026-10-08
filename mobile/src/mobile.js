@@ -471,10 +471,18 @@ function mountUi() {
   fb.hidden = true;
   appConfig().then(c => { fb.hidden = !c.feedback; });
   fb.addEventListener('click', () => openSheet('feedback'));
+  // Symmetrical bar on phones: feedback leads, sync trails, the date sits
+  // between them. The decorative logo gives way to feedback (Apple's toolbar
+  // guidance: leading/trailing items, no app name or logo as the title).
   const actions = document.createElement('div');
   actions.className = 'm-actions';
-  actions.append(fb, btn);
+  actions.append(btn);
   avatar.replaceWith(actions);
+  const lead = document.createElement('div');
+  lead.className = 'm-lead';
+  lead.append(fb);
+  const brand = document.querySelector('.bar-inner .brand');
+  if (brand) brand.replaceWith(lead);
   // app.js still sets the initials on #avatar; keep a detached one for it.
   avatar.style.display = 'none';
   document.body.appendChild(avatar);
