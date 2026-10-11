@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataStrap: your Fitbit data, analysed on your phone</title>
+  <meta name="description" content="DataStrap is a personal dashboard for Fitbit and Google Health data. It works out recovery, strain and sleep on your own device.">
+  <style>
+    :root { color-scheme: dark; --bg: #050506; --fg: #e8e8ea; --muted: #9a9aa3; --accent: #4fd1c5; }
+    @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg: #fafafa; --fg: #15151a; --muted: #5b5b66; --accent: #0f766e; } }
+    :root[data-theme="light"] { --bg: #fafafa; --fg: #15151a; --muted: #5b5b66; --accent: #0f766e; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 -apple-system, system-ui, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; }
+    h1 { font-size: 32px; line-height: 1.2; margin: 0 0 12px; }
+    h2 { font-size: 18px; margin: 32px 0 8px; }
+    p, li { color: var(--fg); }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    .cta { display: inline-block; margin: 16px 0; padding: 12px 20px; border-radius: 10px; background: var(--accent); color: #050506; font-weight: 600; text-decoration: none; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>DataStrap</h1>
+  <p class="muted">Your Fitbit and Google Health data, scored on your own device.</p>
+
+  <p>DataStrap is a personal dashboard. After you sign in with Google, it downloads your activity, sleep and heart-rate data and works out:</p>
+  <ul>
+    <li><strong>Recovery</strong>: a daily 0–100 score from your heart rate variability, resting heart rate, breathing rate and skin temperature, compared with your own baseline.</li>
+    <li><strong>Strain</strong>: a 0–21 score for how hard you worked, from your heart rate.</li>
+    <li><strong>Sleep</strong>: stages, efficiency and an estimated sleep score.</li>
+    <li><strong>Workouts</strong>: heart-rate zones, peak heart rate and recovery for each session.</li>
+  </ul>
+
+  <h2>Your data stays with you</h2>
+  <p>DataStrap runs in your browser or on your phone. Your health data is stored on your device, not on a DataStrap server. It has no advertising or analytics code.</p>
+
+  <p><a class="cta" href="./">Open DataStrap</a></p>
+
+  <h2>Policies</h2>
+  <p><a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Service</a></p>
+
+  <p class="muted">DataStrap is an independent project. It is not made by, endorsed by or affiliated with Google or Fitbit.</p>
+</main>
+</body>
+</html>
