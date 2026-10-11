@@ -2,7 +2,16 @@
 // Home shows the selected day at a glance; every metric opens a detail page
 // with Day / Week / Month / 3-month views over calendar periods.
 
-const state = { data: null, idx: 0, route: { page: 'home' } };
+const state = { data: null, idx: 0, route: { page: 'home' }, mode: 'std' };
+try { state.mode = localStorage.getItem('ds-mode') === 'perf' ? 'perf' : 'std'; } catch { /* storage blocked */ }
+
+// ---------- Modes ----------
+// Standard shows the everyday numbers; Performance shows everything. Both
+// modes have all the data: a mode only decides what's shown.
+const perf = () => state.mode === 'perf';
+// Whole metric pages that are Performance-only, and where Standard goes instead.
+const PERF_ONLY = new Set(['strain', 'stress', 'temp', 'resp', 'bioAge', 'vo2']);
+const STD_FALLBACK = { strain: 'steps' };
 
 const BASELINE_DAYS = 14;
 const RANGE_DAYS = 30;
@@ -619,9 +628,10 @@ function weekStrip() {
     const d = days()[i];
     const rec = M.recovery.pick(d);
     const t = tierOf(rec);
-    const arc = isNum(rec)
-      ? `<circle class="arc" cx="13" cy="13" r="10" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - rec / 100)}" style="stroke:${t.color}"/>`
-      : '';
+    const steps = d.strain.steps;
+    const arc = perf()
+      ? (isNum(rec) ? `<circle class="arc" cx="13" cy="13" r="10" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - rec / 100)}" style="stroke:${t.color}"/>` : '')
+      : (isNum(steps) && steps > 0 ? `<circle class="arc" cx="13" cy="13" r="10" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - Math.min(1, steps / M.steps.goal))}" style="stroke:${accent('steps')}"/>` : '');
     return `<a class="wday ${i === state.idx && moved ? 'bounce' : ''}" href="${hrefHome(d.date)}" data-replace ${i === state.idx ? 'aria-current="date"' : ''}
         aria-label="${esc(longDate(d.date))}${isNum(rec) ? `, recovery ${rec}%` : ''}">
       <span class="label">${parseDate(d.date).getDate() === 1 ? fmtDate(d.date, { month: 'short' }) : fmtDate(d.date, { weekday: 'short' })}</span>
@@ -659,11 +669,16 @@ function dials(d) {
       tag: isNum(score) && sl.score_source === 'estimate' ? 'Est.' : '',
       label: `Sleep score ${isNum(score) ? score + '%' : 'not available'}`,
     },
-    {
+    perf() ? {
       key: 'strain', name: 'Strain', color: 'var(--strain)', frac: isNum(st) ? st / 21 : null,
       value: isNum(st) ? `${num(st, 1, 'dial-strain')}<small>/21</small>` : '',
       sub: isNum(st) ? `${strainWord(st)}${isLatest ? ' so far' : ''}` : 'No heart rate',
       label: `Strain ${isNum(st) ? fmt(st, 1) + ' of 21' : 'not available'}`,
+    } : {
+      key: 'steps', name: 'Steps', color: accent('steps'), frac: isNum(d.strain.steps) ? d.strain.steps / M.steps.goal : null,
+      value: isNum(d.strain.steps) ? num(d.strain.steps, 0, 'dial-steps') : '',
+      sub: `of ${fmt(M.steps.goal)}`,
+      label: `Steps ${isNum(d.strain.steps) ? fmt(d.strain.steps) : 'not available'} of ${fmt(M.steps.goal)}`,
     },
   ];
   const SW = 15, GAP = 5;
@@ -695,7 +710,7 @@ function insightCard(d) {
   const t = tierOf(rec);
   const rel = relativeDay(d.date);
   const chips = [
-    t ? `<span class="chip">${ph('zap', '', 'duotone')}Aim for <b>${t.strain}</b> strain</span>` : '',
+    t && perf() ? `<span class="chip">${ph('zap', '', 'duotone')}Aim for <b>${t.strain}</b> strain</span>` : '',
     isNum(d.sleep.duration_minutes) ? `<a class="chip" href="${hrefMetric('sleep', 'day', d.date)}">${ph('moon', '', 'duotone')}Slept <b>${fmtDur(d.sleep.duration_minutes)}</b></a>` : '',
     isNum(d.strain.steps) ? `<a class="chip" href="${hrefMetric('steps', 'day', d.date)}">${ph('footprints', '', 'duotone')}<b>${fmt(d.strain.steps)}</b> steps</a>` : '',
   ].join('');
@@ -704,7 +719,7 @@ function insightCard(d) {
     <div class="insight-body">
       <span class="label insight-date">${esc(rel ? `${rel} · ${fullDate(d.date)}` : fullDate(d.date))}</span>
       <h1>${esc(story.head)}</h1>
-      <p>${esc(story.body)}</p>
+      <p>${esc(perf() ? story.body : story.body.replace(/[^.]*\bstrain\b[^.]*\.\s*/gi, '').trim())}</p>
       <div class="chips">${chips}</div>
     </div>
   </section>`;
@@ -913,7 +928,7 @@ function workoutRow(iso, i, w, { showDate = false } = {}) {
   return `<a class="workout" href="${hrefWorkout(iso, i)}">
       <span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'duotone')}</span>
       <div class="workout-main"><div class="workout-name">${esc(w.name)}</div><div class="workout-meta">${esc(meta)}</div></div>
-      <div class="workout-strain">${isNum(w.strain) ? `<b>${fmt(w.strain, 1)}</b><span class="label">strain</span>` : `<b>${w.duration_minutes}</b><span class="label">min</span>`}</div>
+      <div class="workout-strain">${perf() && isNum(w.strain) ? `<b>${fmt(w.strain, 1)}</b><span class="label">strain</span>` : `<b>${w.duration_minutes}</b><span class="label">min</span>`}</div>
       ${icon('chev', 'workout-chev')}
     </a>`;
 }
@@ -1056,7 +1071,7 @@ function renderWorkout() {
   document.documentElement.style.setProperty('--mood', 'var(--strain)');
 
   const big = [
-    { label: 'Strain', value: isNum(w.strain) ? fmt(w.strain, 1) : '--', sub: 'this workout', accent: true },
+    ...(perf() ? [{ label: 'Strain', value: isNum(w.strain) ? fmt(w.strain, 1) : '--', sub: 'this workout', accent: true }] : []),
     { label: 'Duration', value: `${w.duration_minutes} min`, sub: `${w.time}–${endTime(w)}` },
     { label: 'Calories', value: w.calories ? `${fmt(w.calories)} cal` : '--' },
     { label: 'Average HR', value: isNum(w.avg_hr_measured) ? `${w.avg_hr_measured} bpm` : w.avg_hr ? `${w.avg_hr} bpm` : '--' },
@@ -1075,8 +1090,8 @@ function renderWorkout() {
 
   const extras = [];
   const drop = v => `${v > 0 ? '−' : v < 0 ? '+' : ''}${Math.abs(v)} bpm`;
-  if (isNum(w.hr_recovery_60)) extras.push({ label: 'Recovery · 1 min', value: drop(w.hr_recovery_60), sub: 'drop after you stopped' });
-  if (isNum(w.hr_recovery)) extras.push({ label: 'Recovery · 2 min', value: drop(w.hr_recovery), sub: 'drop after you stopped' });
+  if (perf() && isNum(w.hr_recovery_60)) extras.push({ label: 'Recovery · 1 min', value: drop(w.hr_recovery_60), sub: 'drop after you stopped' });
+  if (perf() && isNum(w.hr_recovery)) extras.push({ label: 'Recovery · 2 min', value: drop(w.hr_recovery), sub: 'drop after you stopped' });
   if (w.distance_km) extras.push({ label: 'Distance', value: `${fmt(w.distance_km, 2)} km` });
   if (w.distance_km && w.duration_minutes) {
     const pace = w.duration_minutes / w.distance_km;
@@ -1101,7 +1116,7 @@ function renderWorkout() {
       ? `<div class="cmp"><span>${label}</span><b>${fmt(mine, dp)}${unit}</b><em class="${mine >= theirs ? 'up' : 'down'}">${mine >= theirs ? '+' : '−'}${fmt(Math.abs(mine - theirs), dp)} vs usual</em></div>` : '');
     compare = `<section class="panel"><div class="panel-title"><span class="label">Compared with your last ${past.length} ${esc(w.name.toLowerCase())} session${past.length > 1 ? 's' : ''}</span></div>
       <div class="cmps">
-        ${cmp('Strain', w.strain, avg(x => x.strain), '', 1)}
+        ${perf() ? cmp('Strain', w.strain, avg(x => x.strain), '', 1) : ''}
         ${cmp('Duration', w.duration_minutes, avg(x => x.duration_minutes), ' min')}
         ${cmp('Average HR', w.avg_hr_measured, avg(x => x.avg_hr_measured), ' bpm')}
         ${cmp('Peak HR', w.peak_hr, avg(x => x.peak_hr), ' bpm')}
@@ -1112,14 +1127,14 @@ function renderWorkout() {
 
   return `
     <div class="detail-head">
-      <a class="back" href="${hrefMetric('strain', 'day', iso)}" aria-label="Back to strain">${icon('back')}<span>Strain</span></a>
+      <a class="back" href="${hrefMetric(perf() ? 'strain' : 'steps', 'day', iso)}" aria-label="Back to ${perf() ? 'strain' : 'activity'}">${icon('back')}<span>${perf() ? 'Strain' : 'Activity'}</span></a>
       <h1 class="detail-title"><span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'duotone')}</span><span>${esc(w.name)}</span></h1>
     </div>
     <p class="w-when">${esc(fullDate(iso))} · ${esc(w.time)}–${esc(endTime(w))}</p>
     ${workoutSummary(w) ? `<p class="w-summary">${esc(workoutSummary(w))}</p>` : ''}
     ${head}
-    <section class="panel" style="--accent:var(--heart)"><div class="panel-title"><span class="label">Heart rate</span></div>${chart}</section>
-    ${zones}
+    ${perf() ? `<section class="panel" style="--accent:var(--heart)"><div class="panel-title"><span class="label">Heart rate</span></div>${chart}</section>
+    ${zones}` : ''}
     ${extras.length ? statCards(extras) : ''}
     ${compare}
     ${w.logged_in_app && w.id && window.DataStrapHost && window.DataStrapHost.deleteWorkout
@@ -1128,11 +1143,27 @@ function renderWorkout() {
   `;
 }
 
-const HOME_SECTIONS = [
-  { title: 'Key metrics', keys: ['bioAge', 'vo2', 'hrv', 'rhr', 'resp', 'spo2', 'temp', 'stress', 'hr'] },
-  { title: 'Sleep', keys: ['sleep', 'sleepScore', 'efficiency'] },
-  { title: 'Activity', keys: ['steps', 'energy', 'strain', 'zones'], workouts: true },
-];
+const HOME_SECTIONS = {
+  perf: [
+    { title: 'Key metrics', keys: ['bioAge', 'vo2', 'hrv', 'rhr', 'resp', 'spo2', 'temp', 'stress', 'hr'] },
+    { title: 'Sleep', keys: ['sleep', 'sleepScore', 'efficiency'] },
+    { title: 'Activity', keys: ['steps', 'energy', 'strain', 'zones'], workouts: true },
+  ],
+  std: [
+    { title: 'Key metrics', keys: ['hr', 'rhr', 'hrv', 'spo2'] },
+    { title: 'Sleep', keys: ['sleep', 'sleepScore', 'efficiency'] },
+    { title: 'Activity', keys: ['steps', 'energy', 'zones'], workouts: true },
+  ],
+};
+
+// Standard / Performance switch at the top of Today.
+function modeSwitch() {
+  return `<div class="mode-switch reveal" role="group" aria-label="View mode" data-mode="${state.mode}">
+    <span class="thumb" aria-hidden="true"></span>
+    <button type="button" data-set-mode="std" aria-pressed="${!perf()}">Standard</button>
+    <button type="button" data-set-mode="perf" aria-pressed="${perf()}">Performance</button>
+  </div>`;
+}
 
 function renderHome() {
   const d = day();
@@ -1140,18 +1171,19 @@ function renderHome() {
   const t = tierOf(rec);
   document.documentElement.style.setProperty('--mood', t ? t.color : 'var(--text-3)');
 
-  const sections = HOME_SECTIONS.map(sec => `<section class="section">
+  const sections = HOME_SECTIONS[state.mode].map(sec => `<section class="section">
       <div class="section-head"><h2>${sec.title}</h2></div>
       <div class="grid">${sec.keys.map(k => metricCard(k, { wide: k === 'sleep' })).join('')}${sec.workouts ? workoutsCard() : ''}</div>
     </section>`).join('');
 
   return `
     ${weekStrip()}
+    ${modeSwitch()}
     ${dials(d)}
     ${insightCard(d)}
     ${myDayPanel(d)}
     ${sections}
-    <section class="section"><div class="section-head"><h2>Trends</h2></div>${trendsPanel()}</section>
+    ${perf() ? `<section class="section"><div class="section-head"><h2>Trends</h2></div>${trendsPanel()}</section>` : ''}
     ${canLog() ? `<button type="button" class="log-fab" data-log-open aria-label="Log an activity">Log ${ph('plus', '', 'bold')}</button>` : ''}
   `;
 }
@@ -1455,6 +1487,7 @@ function periodSummary(key, vals) {
 function renderDetail() {
   const { key, range } = state.route;
   const m = M[key];
+  if (!perf() && PERF_ONLY.has(key)) return perfOnlyPage(key);
   const iso = day().date;
   const color = accent(key);
   const rec = M.recovery.pick(day());
@@ -1479,7 +1512,7 @@ function renderDetail() {
 
   const body = range === 'day' ? detailDay(key, color) : detailPeriod(key, range, p, color);
 
-  const workoutsHtml = key === 'strain' ? workoutsPanel(iso, range) : '';
+  const workoutsHtml = key === (perf() ? 'strain' : 'steps') ? workoutsPanel(iso, range) : '';
   return `
     <div class="detail-head">
       <a class="back" href="${hrefHome(iso)}" aria-label="Back to ${esc(relativeDay(iso) || longDate(iso))}">${icon('back')}<span>${esc(relativeDay(iso) || 'Home')}</span></a>
@@ -1494,6 +1527,35 @@ function renderDetail() {
     ${body.after || ''}
     ${m.note ? `<p class="note">${esc(typeof m.note === 'function' ? m.note() : m.note)}</p>` : ''}
   `;
+}
+
+// Standard's recovery page: the score's meaning in a sentence, no drivers.
+function recoveryTip(d) {
+  const v = M.recovery.pick(d);
+  const t = tierOf(v);
+  if (!t) {
+    return d.cardiovascular.hrv_rmssd != null || isNum(d.cardiovascular.rhr)
+      ? '<p class="empty">Still learning your usual: recovery needs about two weeks of nights.</p>'
+      : '<p class="empty">Recovery is worked out once last night’s data syncs.</p>';
+  }
+  const tip = v >= 67 ? 'You’re well recovered. A good day for a harder workout.'
+    : v >= 34 ? 'You’re fairly recovered. Keep to a steady, moderate day.'
+      : 'Your body is still recovering. Take it easier today and prioritise sleep.';
+  return `<p class="recovery-tip"><b style="color:${t.color}">${esc(t.word)}.</b> ${esc(tip)}</p>
+    <p class="note">Switch to Performance to see what moved your score.</p>`;
+}
+
+// A Performance-only page opened in Standard.
+function perfOnlyPage(key) {
+  const iso = day().date;
+  return `<div class="detail-head">
+      <a class="back" href="${hrefHome(iso)}" aria-label="Back">${icon('back')}<span>${esc(relativeDay(iso) || 'Home')}</span></a>
+      <h1 class="detail-title">${glyph(key)}<span>${esc(M[key].label)}</span></h1>
+    </div>
+    <section class="panel">
+      <p class="recovery-tip">${esc(M[key].label)} is part of Performance mode.</p>
+      <button type="button" class="m-btn primary perf-unlock" data-set-mode="perf">Switch to Performance</button>
+    </section>`;
 }
 
 function headline(label, valueInner, note, noteCls = '', emptyText = 'No data') {
@@ -1603,7 +1665,7 @@ function detailDay(key, color) {
       // Day stats from the per-minute averages (the chart above shows 10-minute samples).
       const hs = d.strain.hr_stats || { avg: Math.round(mean(bpm)), min: Math.min(...bpm), max: Math.max(...bpm), max_time: hr[bpm.indexOf(Math.max(...bpm))].time };
       chart += `<div class="hr-detail" data-hr-date="${d.date}"><p class="note hr-status">Loading every reading for this day…</p></div>`;
-      extra = `<div class="hr-extra"><section class="panel"><div class="panel-title"><span class="label">Time in each zone ${esc(dayName)}</span></div>${zoneBars(z, d.cardiovascular.rhr, state.data.profile.zone_max_hr || state.data.profile.max_hr)}</section>`
+      extra = `<div class="hr-extra">${perf() ? `<section class="panel"><div class="panel-title"><span class="label">Time in each zone ${esc(dayName)}</span></div>${zoneBars(z, d.cardiovascular.rhr, state.data.profile.zone_max_hr || state.data.profile.max_hr)}</section>` : ''}`
         + statCards([
           { label: 'Average', value: `${hs.avg} bpm` },
           { label: 'Lowest', value: `${hs.min} bpm`, sub: 'minute average' },
@@ -1632,6 +1694,8 @@ function detailDay(key, color) {
         { label: 'Sleep score', value: isNum(sl.score) ? String(sl.score) : 'No score', sub: !isNum(sl.score) ? 'no sleep stages' : sl.score_source === 'app' ? 'from the Fitbit app' : 'estimated' },
       ]);
     }
+  } else if (m.intraday === 'drivers' && !perf()) {
+    chart = recoveryTip(d);
   } else if (m.intraday === 'drivers') {
     const drivers = d.recovery.drivers.filter(x => DRIVER_KEY[x.metric]);
     if (isNum(v) && drivers.length) {
@@ -1655,6 +1719,8 @@ function detailDay(key, color) {
     }
   } else if (m.intraday === 'bioage') {
     chart = bioAgeDetail(d, idx);
+  } else if (m.intraday === 'scoreDrivers' && !perf()) {
+    chart = '';
   } else if (m.intraday === 'scoreDrivers') {
     const sl = d.sleep;
     const model = state.data.overview.sleep_score_model || {};
@@ -2014,10 +2080,10 @@ function heartDetailHtml(data, stats, rhr, maxHr, focus) {
   }
   return `<p class="note">${perSecond ? `Every reading: ${fmt(stats.n)}, about one every ${Math.max(1, Math.round(stats.worn / stats.n))} s, worn ${fmtDur(stats.worn / 60)}.` : 'Minute averages (raw readings aren’t stored on this device for this day).'} The line shows 5-minute averages; the dashed line is your resting heart rate. Tap the chart to see every reading in an hour.</p>
     ${zoom}
-    <details class="hours-toggle" ${state.hrHoursOpen ? 'open' : ''}>
+    ${perf() ? `<details class="hours-toggle" ${state.hrHoursOpen ? 'open' : ''}>
       <summary><span>Show hourly breakdown</span><span class="when-open">Hide hourly breakdown</span>${ph('chevron-right', 'toggle-chev')}</summary>
       <div class="hours">${hourRows}</div>
-    </details>`;
+    </details>` : ''}`;
 }
 
 async function hydrateHeartDetail(root) {
@@ -2042,7 +2108,7 @@ async function hydrateHeartDetail(root) {
     mountCharts(panel, false);
     const extra = root.querySelector('.hr-extra');
     if (extra) {
-      extra.innerHTML = `<section class="panel"><div class="panel-title"><span class="label">Time in each zone · every reading</span></div>${zoneBars(stats.zones, rhr, maxHr)}</section>`
+      extra.innerHTML = (perf() ? `<section class="panel"><div class="panel-title"><span class="label">Time in each zone · every reading</span></div>${zoneBars(stats.zones, rhr, maxHr)}</section>` : '')
         + statCards([
           { label: 'Average', value: `${stats.avg} bpm`, sub: 'time-weighted' },
           { label: 'Lowest', value: `${stats.min} bpm`, sub: `at ${hms(stats.minT)}` },
@@ -2124,14 +2190,108 @@ function bindDayScrub(box, onTap) {
   box.addEventListener('pointercancel', end);
 }
 
+// ---------- Switching modes ----------
+// A short full-screen moment, then the new home screen comes out of it.
+// Performance (~1.35 s): black with a faint red grid, an electric-red
+// heartbeat line races across, then the screen opens from the line (top half
+// up, bottom half down, a red edge riding each) as the page unfolds.
+// Standard (~1.65 s): calm. A warm orb breathes at the centre while its light
+// grows to fill the screen, then the orb scales outward and the page grows
+// out of it. Only transforms and opacity animate, so it stays smooth.
+const ECG_PATH = 'M0,60 L118,60 L130,52 L140,60 L170,60 L178,70 L190,14 L202,100 L212,60 L246,60 L258,48 L272,60 L400,60';
+let switchingMode = false;
+
+function syncModeSwitches() {
+  document.querySelectorAll('.mode-switch').forEach(el => {
+    el.dataset.mode = state.mode;
+    el.querySelectorAll('[data-set-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.setMode === state.mode)));
+  });
+}
+
+function modeTakeover(to, swap, done) {
+  const o = document.createElement('div');
+  o.className = `mode-takeover ${to}`;
+  o.setAttribute('aria-hidden', 'true');
+  const main = $('#main');
+  const origin = `50% ${Math.round(window.scrollY + window.innerHeight / 2)}px`;
+  const lin = { easing: 'linear', fill: 'both' };
+  if (to === 'perf') {
+    o.innerHTML = `<div class="mt-half top"><i class="mt-edge"></i></div><div class="mt-half bot"><i class="mt-edge"></i></div>
+      <svg class="mt-ecg" viewBox="0 0 400 120" preserveAspectRatio="none"><path class="glow" d="${ECG_PATH}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+      <path class="core" d="${ECG_PATH}" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/></svg>`;
+    document.body.appendChild(o);
+    const T = 1350, R0 = .58, ease = 'cubic-bezier(.62,0,.18,1)';
+    o.querySelectorAll('.mt-half').forEach((h, i) => h.animate([
+      { opacity: 0, transform: 'translateY(0)', easing: 'ease-out' }, { opacity: 1, transform: 'translateY(0)', offset: .12 },
+      { opacity: 1, transform: 'translateY(0)', offset: R0, easing: ease }, { opacity: 1, transform: `translateY(${i ? '' : '-'}101%)` }], { duration: T, ...lin }));
+    o.querySelectorAll('.mt-edge').forEach(e => e.animate([{ opacity: 0 }, { opacity: 0, offset: R0 - .02 }, { opacity: 1, offset: R0 + .02 }, { opacity: 1, offset: .9 }, { opacity: 0 }], { duration: T, ...lin }));
+    o.querySelectorAll('.mt-ecg path').forEach(p => p.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], { duration: T * .5, delay: T * .06, easing: 'cubic-bezier(.3,0,.3,1)', fill: 'both' }));
+    o.querySelector('.mt-ecg').animate([{ opacity: 0 }, { opacity: 1, offset: .08 }, { opacity: 1, offset: R0 }, { opacity: 0, offset: R0 + .1 }, { opacity: 0 }], { duration: T, ...lin });
+    setTimeout(() => {
+      swap();
+      main.style.transformOrigin = origin;
+      main.animate([{ transform: 'scaleY(.9) scaleX(.97)' }, { transform: 'none' }], { duration: T * (1 - R0), easing: ease });
+    }, T * R0 - 20);
+    setTimeout(() => { o.remove(); main.style.transformOrigin = ''; done(); }, T + 30);
+    return;
+  }
+  o.innerHTML = '<div class="mt-light"></div><div class="mt-orb"></div>';
+  document.body.appendChild(o);
+  const T = 1650, R0 = .6, D = T * (1 - R0), ease = 'cubic-bezier(.3,0,.2,1)';
+  o.animate([{ opacity: 0, easing: 'ease-out' }, { opacity: 1, offset: .12 }, { opacity: 1, offset: R0, easing: 'cubic-bezier(.4,0,.2,1)' }, { opacity: 0 }], { duration: T, ...lin });
+  o.querySelector('.mt-light').animate([
+    { transform: 'scale(.2)', opacity: 0, easing: 'cubic-bezier(.3,0,.3,1)' }, { transform: 'scale(.6)', opacity: .7, offset: .3, easing: 'cubic-bezier(.25,.1,.25,1)' },
+    { transform: 'scale(2.1)', opacity: 1, offset: .9 }, { transform: 'scale(2.8)', opacity: 0 }], { duration: T * .92, delay: T * .08, ...lin });
+  o.querySelector('.mt-orb').animate([
+    { transform: 'scale(.55)', opacity: 0, easing: 'cubic-bezier(.3,0,.3,1)' }, { transform: 'scale(1)', opacity: 1, offset: .12, easing: 'ease-in-out' },
+    { transform: 'scale(.86)', opacity: .85, offset: .22, easing: 'ease-in-out' }, { transform: 'scale(1.02)', opacity: 1, offset: .32, easing: 'ease-in-out' },
+    { transform: 'scale(.92)', opacity: .95, offset: R0, easing: ease }, { transform: 'scale(2.8)', opacity: 0, offset: R0 + (1 - R0) * .55 }, { transform: 'scale(2.8)', opacity: 0 }],
+    { duration: T, ...lin });
+  setTimeout(() => {
+    swap();
+    main.style.transformOrigin = origin;
+    main.animate([{ transform: 'scale(.82)', opacity: .2, borderRadius: '48px' }, { transform: 'none', opacity: 1, borderRadius: '0px' }], { duration: D, easing: ease });
+  }, T * R0 - 20);
+  setTimeout(() => { o.remove(); main.style.transformOrigin = ''; done(); }, T + 30);
+}
+
+function setMode(next) {
+  if (next === state.mode || switchingMode || !state.data) return;
+  state.mode = next;
+  try { localStorage.setItem('ds-mode', next); } catch { /* storage blocked */ }
+  syncModeSwitches();
+  const iso = day().date;
+  const r = state.route;
+  // A Performance-only page has no place in Standard: go to its match, or Today.
+  const target = r.page === 'metric' && !perf() && PERF_ONLY.has(r.key)
+    ? (STD_FALLBACK[r.key] ? hrefMetric(STD_FALLBACK[r.key], 'day', iso) : hrefHome(iso)) : null;
+  const swap = () => {
+    if (target) history.replaceState(null, '', target);
+    lastHash = null;
+    firstRender = true; // no page-slide transition under the mode animation
+    route();
+  };
+  if (reducedMotion) { swap(); return; }
+  switchingMode = true;
+  modeTakeover(next, swap, () => { switchingMode = false; });
+}
+
 // ---------- Tab bar (phones) ----------
-const TABS = [
-  { id: 'today', label: 'Today', icon: 'house', href: iso => hrefHome(iso), keys: [] },
-  { id: 'recovery', label: 'Recovery', icon: 'battery-charging', href: iso => hrefMetric('recovery', 'day', iso), keys: ['recovery'] },
-  { id: 'sleep', label: 'Sleep', icon: 'moon', href: iso => hrefMetric('sleep', 'day', iso), keys: ['sleep', 'sleepScore', 'efficiency'] },
-  { id: 'strain', label: 'Strain', icon: 'zap', href: iso => hrefMetric('strain', 'day', iso), keys: ['strain', 'steps', 'energy', 'zones'] },
-  { id: 'heart', label: 'Heart', icon: 'heart-pulse', href: iso => hrefMetric('hr', 'day', iso), keys: ['hr', 'hrv', 'rhr', 'stress'] },
-];
+const TABS_BY_MODE = {
+  perf: [
+    { id: 'today', label: 'Today', icon: 'house', href: iso => hrefHome(iso), keys: [] },
+    { id: 'recovery', label: 'Recovery', icon: 'battery-charging', href: iso => hrefMetric('recovery', 'day', iso), keys: ['recovery'] },
+    { id: 'sleep', label: 'Sleep', icon: 'moon', href: iso => hrefMetric('sleep', 'day', iso), keys: ['sleep', 'sleepScore', 'efficiency'] },
+    { id: 'strain', label: 'Strain', icon: 'zap', href: iso => hrefMetric('strain', 'day', iso), keys: ['strain', 'steps', 'energy', 'zones'] },
+    { id: 'heart', label: 'Heart', icon: 'heart-pulse', href: iso => hrefMetric('hr', 'day', iso), keys: ['hr', 'hrv', 'rhr', 'stress'] },
+  ],
+  std: [
+    { id: 'today', label: 'Today', icon: 'house', href: iso => hrefHome(iso), keys: ['recovery'] },
+    { id: 'sleep', label: 'Sleep', icon: 'moon', href: iso => hrefMetric('sleep', 'day', iso), keys: ['sleep', 'sleepScore', 'efficiency'] },
+    { id: 'activity', label: 'Activity', icon: 'run', href: iso => hrefMetric('steps', 'day', iso), keys: ['steps', 'energy', 'zones'] },
+    { id: 'heart', label: 'Heart', icon: 'heart-pulse', href: iso => hrefMetric('hr', 'day', iso), keys: ['hr', 'hrv', 'rhr', 'spo2'] },
+  ],
+};
 
 let lastTab = null;
 function renderTabbar() {
@@ -2144,9 +2304,11 @@ function renderTabbar() {
     document.body.appendChild(bar);
   }
   const r = state.route;
-  const active = r.page === 'home' ? 'today' : r.page === 'workout' ? 'strain' : (TABS.find(t => t.keys.includes(r.key)) || {}).id;
+  const TABS = TABS_BY_MODE[state.mode];
+  const active = r.page === 'home' ? 'today' : r.page === 'workout' ? (perf() ? 'strain' : 'activity') : (TABS.find(t => t.keys.includes(r.key)) || {}).id;
   const iso = day().date;
   const accentOf = t => (t.id === 'today' ? 'var(--text)' : t.id === 'recovery' ? 'var(--good)' : GROUPS[t.id === 'strain' ? 'activity' : t.id].color);
+  if (bar.dataset.mode !== state.mode) { bar.dataset.mode = state.mode; tabIndX = null; }
   bar.innerHTML = '<span class="tab-ind" aria-hidden="true"></span>' + TABS.map(t => `<a href="${t.href(iso)}" class="tab ${t.id === active ? 'on' : ''} ${t.id === active && lastTab !== null && lastTab !== active ? 'pop' : ''}" ${t.id === active ? 'aria-current="page"' : ''} data-tab="${t.id}" style="--accent:${accentOf(t)}">
       <span class="tab-icon">${ph(t.icon, '', t.id === active ? 'fill' : 'regular')}</span><span class="tab-label">${t.label}</span></a>`).join('');
   const moved = lastTab !== null && lastTab !== active;
@@ -2431,6 +2593,8 @@ function bindEvents() {
   picker.addEventListener('change', e => { const i = dateIndex(e.target.value); if (i >= 0) setDay(i); });
 
   document.addEventListener('click', e => {
+    const modeBtn = e.target.closest('[data-set-mode]');
+    if (modeBtn) { setMode(modeBtn.dataset.setMode); return; }
     if (e.target.closest('[data-log-open]')) { openLogSheet(); return; }
     const del = e.target.closest('[data-delete-workout]');
     if (del) { deleteWorkout(del); return; }
@@ -2527,6 +2691,8 @@ function showData(data, { demo = false } = {}) {
 // through window.DataStrapHost instead of dashboard_data.json.
 window.DataStrap = {
   toast,
+  setMode: m => setMode(m),
+  getMode: () => state.mode,
   refresh(data) {
     hrCache.clear();
     const first = !state.data;

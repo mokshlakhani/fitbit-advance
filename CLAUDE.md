@@ -82,6 +82,12 @@ Git-ignored, per user: `profile.json`, `google_tokens.json`, `credentials.json` 
 ## 4b. Web app sign-in
 - Browser OAuth gives one-hour tokens and no refresh token. `token-server/` is a Cloudflare Worker that holds the web client's secret (a Worker secret, never in the repo) and exchanges authorization codes (PKCE) and refresh tokens; it stores and logs nothing and answers only `ALLOWED_ORIGINS`. With `tokenServer` set in `mobile/web.config.json`, `webauth.js` uses the code flow and renews in the background; without it, the implicit flow with silent `prompt=none` redirects. Deploy: `cd token-server && npx wrangler login && npx wrangler secret put GOOGLE_CLIENT_SECRET && npx wrangler deploy`.
 
+## 4c. Standard and Performance modes (app.js)
+- `state.mode` (`std` / `perf`, saved in localStorage `ds-mode`, default Standard) only decides what's shown; all data is computed in both. Switch: top of Today and the phone ↻ sheet (`window.DataStrap.setMode`).
+- Standard: rings Recovery / Sleep score / Steps; day strip shows steps rings; home cards HR, resting HR, HRV, SpO₂, sleep (time, score, efficiency), steps, energy, zone minutes, workouts; tabs Today, Sleep, Activity (steps page, with workouts), Heart; Recovery page is a one-line tip (no drivers); no sleep-score breakdown, heart hourly breakdown or zone panels, trends panel, or workout strain / HR chart / zone times / HR recovery.
+- Performance: everything. `PERF_ONLY` metric pages (strain, stress, skin temp, breathing, body age, VO₂ max) show a "switch to Performance" card in Standard; switching to Standard from one goes to its match (`STD_FALLBACK`) or Today.
+- Switching plays `modeTakeover` (Performance: red ECG line, the page unfolds from it; Standard: a breathing orb whose light grows, then the page grows out of it). Transforms and opacity only; instant with reduced motion.
+
 ## 5. Gotchas
 - **Google Cloud OAuth brand rejected**: app names can't contain "Fitbit"/"Google"; leave domain/privacy-policy fields blank for testing.
 - **Shared OAuth client**: must be a *Desktop app* client (any loopback port allowed). The consent screen must be **In production** for other users (Testing mode only admits listed test users and expires refresh tokens after 7 days). Unverified apps show a warning and are capped at 100 users.

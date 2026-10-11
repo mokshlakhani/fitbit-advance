@@ -402,6 +402,11 @@ async function renderSheet(mode = sheetMode) {
       : '<button class="m-btn primary" data-act="signin">Sign in with Google</button>'}
     <p class="m-note">Updates when you open the app and every 5 minutes while it’s open. New readings appear after your Fitbit syncs to the Fitbit app.</p>
 
+    <h2 class="m-title">View</h2>
+    ${(() => { const m = window.DataStrap?.getMode?.() || 'std'; return `<div class="mode-switch" role="group" aria-label="View mode" data-mode="${m}"><span class="thumb" aria-hidden="true"></span>
+      <button type="button" data-set-mode="std" aria-pressed="${m === 'std'}">Standard</button><button type="button" data-set-mode="perf" aria-pressed="${m === 'perf'}">Performance</button></div>`; })()}
+    <p class="m-note">Standard shows the everyday numbers. Performance adds recovery, strain, body age and the detail behind them.</p>
+
     <h2 class="m-title">Fitbit app sleep score</h2>
     <p class="m-note">Google doesn’t share the app’s sleep score, so DataStrap estimates it. Entering the app’s score for a night uses the real value and teaches the estimate.</p>
     <form class="m-row" data-form="score">
@@ -498,6 +503,7 @@ function mountUi() {
   sheet.addEventListener('click', e => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'close') closeSheet();
+    if (e.target.closest('[data-set-mode]')) closeSheet(); // app.js switches mode
     if (act === 'sync') runSync({ manual: true });
     if (act === 'signin') signIn();
     if (act === 'signout') signOut();

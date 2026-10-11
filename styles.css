@@ -1353,3 +1353,47 @@ body.log-open .log-fab { opacity: 0; pointer-events: none; }
   .tabbar, html.ios .tabbar { background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); border-color: var(--glass-edge); }
 }
 
+
+/* ---------- Standard / Performance ---------- */
+.mode-switch {
+  position: relative; display: grid; grid-template-columns: 1fr 1fr; width: min(100%, 340px); margin: 0 auto;
+  padding: 3px; border-radius: var(--pill); background: rgba(255,255,255,.05); border: 1px solid var(--line-strong);
+}
+.mode-switch button {
+  position: relative; z-index: 1; border: 0; background: none; cursor: pointer; padding: 8px 0; border-radius: var(--pill);
+  font: 700 .8rem var(--font-label); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3);
+  transition: color .25s var(--ease); -webkit-tap-highlight-color: transparent;
+}
+.mode-switch button[aria-pressed="true"] { color: var(--text); }
+.mode-switch button:focus-visible { outline: 2px solid var(--strain); outline-offset: 2px; }
+.mode-switch .thumb {
+  position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: var(--pill);
+  background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-strong);
+  transition: transform .42s var(--bounce), background-color .3s var(--ease);
+}
+.mode-switch[data-mode="perf"] .thumb { transform: translateX(100%); background: color-mix(in srgb, var(--strain) 24%, var(--raised)); }
+.mode-switch[data-mode="perf"] button[data-set-mode="perf"] { color: #cfe5ff; }
+.recovery-tip { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--text-2); max-width: 60ch; }
+.recovery-tip b { font-weight: 700; }
+.perf-unlock { align-self: flex-start; width: auto; padding: 0 20px; }
+
+/* Mode switch animation (app.js modeTakeover). Transforms and opacity only. */
+.mode-takeover { position: fixed; inset: 0; z-index: 1000; pointer-events: none; overflow: hidden; }
+.mode-takeover.perf .mt-half { position: absolute; left: 0; right: 0; height: 50%; background-color: #000; will-change: transform, opacity;
+  background-image: linear-gradient(rgba(255,60,60,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,60,60,.07) 1px, transparent 1px);
+  background-size: 24px 24px; }
+.mode-takeover.perf .mt-half.top { top: 0; background-position: 0 100%; }
+.mode-takeover.perf .mt-half.bot { top: 50%; background-position: 0 0; }
+.mode-takeover.perf .mt-edge { position: absolute; left: 0; right: 0; height: 2px; background: #ff3b49; will-change: opacity;
+  box-shadow: 0 0 10px 1px rgba(255,45,61,.85), 0 0 26px 4px rgba(255,45,61,.35); }
+.mode-takeover.perf .top .mt-edge { bottom: -1px; }
+.mode-takeover.perf .bot .mt-edge { top: -1px; }
+.mode-takeover.perf .mt-ecg { position: absolute; left: 0; top: 50%; width: 100%; height: 120px; margin-top: -60px; overflow: visible; will-change: opacity; }
+.mode-takeover.perf .mt-ecg path { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.mode-takeover.perf .mt-ecg .glow { stroke: rgba(255,40,50,.28); stroke-width: 9; }
+.mode-takeover.perf .mt-ecg .core { stroke: #ff2d3d; stroke-width: 2.4; }
+.mode-takeover.std { display: grid; place-items: center; background: #070707; will-change: opacity; }
+.mode-takeover.std .mt-light { position: absolute; width: 420px; height: 420px; border-radius: 50%; will-change: transform, opacity;
+  background: radial-gradient(circle, rgba(255,232,204,.34) 0%, rgba(255,222,186,.16) 30%, rgba(255,214,170,.06) 50%, transparent 70%); }
+.mode-takeover.std .mt-orb { position: absolute; width: 150px; height: 150px; border-radius: 50%; will-change: transform, opacity;
+  background: radial-gradient(circle, #fff6ea 0%, rgba(255,236,212,.85) 14%, rgba(255,222,186,.32) 34%, rgba(255,214,170,.1) 52%, transparent 70%); }
