@@ -20,7 +20,7 @@
 <body>
 <main>
   <h1>DataStrap Privacy Policy</h1>
-  <p class="muted">Last updated: 11 October 2026</p>
+  <p class="muted">Last updated: 12 October 2026</p>
 
   <p>DataStrap is a personal health dashboard. It runs in your web browser or on your phone and works out recovery, strain, sleep and related scores from your own Fitbit data. This policy explains what happens to your information.</p>
 
@@ -36,7 +36,10 @@
   <p>DataStrap asks for one write permission, <em>activity and fitness (write)</em>, only if you use the Log + feature to record a workout. Without it, the app cannot save workouts to your Google Health account.</p>
 
   <h2>Where your data is stored</h2>
-  <p>Downloaded data is kept in your browser's storage (IndexedDB) or the app's private storage on your device. It is not uploaded to any DataStrap server, because DataStrap does not operate one. You can remove it by clearing the site's data in your browser, or by deleting the app from your home screen.</p>
+  <p>Downloaded data is kept in your browser's storage (IndexedDB) or the app's private storage on your device. Your health data is never uploaded to a DataStrap server. You can remove it by clearing the site's data in your browser, or by deleting the app from your home screen.</p>
+
+  <h2>Sign-in helper</h2>
+  <p>So that the web version stays signed in for longer than an hour, it uses a small sign-in helper run by the developer on Cloudflare Workers. When you sign in, and about once an hour after that, the app sends the helper Google's one-time sign-in code or your sign-in renewal token. The helper adds the app's client secret, passes the request to Google, and returns Google's reply to your device. It never sees your health data, and it does not store or log these codes or tokens. The Android app doesn't use it.</p>
 
   <h2>Optional Google Takeout import</h2>
   <p>If you import a Google Takeout export, the file is read on your device. Only the values DataStrap needs, such as VO₂ max, are kept. The file itself is not uploaded.</p>

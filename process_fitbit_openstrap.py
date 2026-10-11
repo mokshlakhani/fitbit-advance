@@ -312,8 +312,8 @@ def load_resting_hr():
 
 def load_workouts():
     workouts = {}
-    path = os.path.join(BASE_DIR, 'Global Export Data', 'exercise-0.json')
-    if os.path.exists(path):
+    # Fitbit splits workouts into files of 100: exercise-0.json, exercise-100.json, ...
+    for path in sorted(glob.glob(os.path.join(BASE_DIR, 'Global Export Data', 'exercise-*.json'))):
         with open(path) as fp:
             d = json.load(fp)
             for ex in d:
@@ -472,6 +472,19 @@ def calculate_trimp_and_strain(minute_hr_series, resting_hr, max_hr=190, sex=Non
     return round(trimp, 1), strain, zone_pct
 
 
+LOAD_RHR_DAYS = 7  # strain and zones may borrow a resting HR at most this old
+
+
+def ten_minute_means(minute_hr):
+    """[{'time': 'HH:M0', 'bpm'}] mean of each 10-minute block that has readings."""
+    blocks = {}
+    for pt in minute_hr:
+        hh, mm = pt['time'].split(':')
+        key = f"{hh}:{int(mm) // 10}0"
+        blocks.setdefault(key, []).append(pt['bpm'])
+    return [{'time': k, 'bpm': int(round(sum(v) / len(v)))} for k, v in sorted(blocks.items())]
+
+
 def asleep_minutes(dt, sleep_data):
     """The day's 'HH:MM' minutes covered by a main sleep: the night that ends on
     dt and the one that starts on dt's evening (it belongs to the next date)."""
@@ -605,9 +618,11 @@ RECOVERY_INPUTS = [
 # Breathing rate and skin temperature are warning signs when they move away
 # from normal, a rise twice as much as a fall: a lower reading is not "better
 # recovered" (OpenStrap's own notes flag the old lower-is-better sign for
-# temperature). STEADY_CENTER = E[max(z,0) + 0.5·max(-z,0)] for a normal z
-# = 1.5/sqrt(2*pi), so an ordinary night adds nothing on average.
-STEADY_CENTER = 1.5 / math.sqrt(2 * math.pi)
+# temperature). STEADY_CENTER = E[max(z,0) + 0.5·max(-z,0)] = 0.75·E|z|, so an
+# ordinary night adds nothing on average. A night's robust z against its own
+# 14-reading baseline has E|z| of about 1.0 (simulated), not the 0.80 of a
+# standard normal: the baseline median and MAD are themselves estimates.
+STEADY_CENTER = 0.75
 
 
 def baseline_for(history, dt):
@@ -668,7 +683,10 @@ def nightly_stress(rmssd, rhr, histories, dt):
     base_rhr = baseline_for(histories['rhr'], dt)
     if base_hrv is None or base_rhr is None:
         return None
-    s = (robust_z(rhr, base_rhr) - robust_z(rmssd, base_hrv)) / 2.0
+    # As in recovery: a resting-HR baseline with under 1 bpm of spread can't
+    # measure a change, so resting HR counts as typical (z = 0).
+    z_rhr = robust_z(rhr, base_rhr) if float(np.std(base_rhr)) >= 1.0 else 0.0
+    s = (z_rhr - robust_z(rmssd, base_hrv)) / 2.0
     return int(round(100.0 / (1.0 + math.exp(-s))))
 
 
@@ -793,6 +811,7 @@ def assemble(src, profile, labels_path):
     
     # (date, value) per vital, for the recovery and stress baselines.
     histories = {'hrv': [], 'rhr': [], 'resp': [], 'temp': []}
+    last_rhr, last_rhr_date = None, None
     last_vo2 = None
     last_vo2_date = None
     
@@ -849,11 +868,16 @@ def assemble(src, profile, labels_path):
             target_strain = '< 10.0'
             coach_tip = 'Autonomic indicators show elevated fatigue. Prioritize sleep and active recovery.'
 
-        # Intraday HR & Strain
+        # Intraday HR & Strain. Fitbit often hasn't worked out the day's resting
+        # HR yet (today, or a day it skipped); strain and zones then use the
+        # most recent one from the last LOAD_RHR_DAYS days rather than none.
+        if rhr:
+            last_rhr, last_rhr_date = rhr, dt
+        load_rhr = rhr or (last_rhr if last_rhr_date and (datetime.strptime(dt, '%Y-%m-%d') - datetime.strptime(last_rhr_date, '%Y-%m-%d')).days <= LOAD_RHR_DAYS else None)
         minute_hr = intraday_hr.get(dt, [])
-        trimp, day_strain, hr_zones = calculate_trimp_and_strain(minute_hr, rhr, profile['max_hr'], profile['sex'], profile.get('zone_max_hr'))
+        trimp, day_strain, hr_zones = calculate_trimp_and_strain(minute_hr, load_rhr, profile['max_hr'], profile['sex'], profile.get('zone_max_hr'))
         day_samples = src.get('workout_hr', {}).get(dt)
-        day_workouts = [analyse_workout(w, minute_hr, day_samples, rhr, profile['max_hr'], profile['sex'], profile.get('zone_max_hr')) for w in day_workouts]
+        day_workouts = [analyse_workout(w, minute_hr, day_samples, load_rhr, profile['max_hr'], profile['sex'], profile.get('zone_max_hr')) for w in day_workouts]
         
         # Sleep details: only from a recorded main sleep, never estimated.
         minutes_asleep = sleep_entry.get('minutesAsleep') or None
@@ -870,8 +894,8 @@ def assemble(src, profile, labels_path):
         fitness = fitness_profile(profile['chronological_age'], profile['sex'], vo2)
         stress = nightly_stress(rmssd, rhr, histories, dt)
         
-        # Downsampled HR series for intraday sparkline chart (every 10 mins)
-        intraday_spark = [minute_hr[i] for i in range(0, len(minute_hr), 10)] if len(minute_hr) > 0 else []
+        # 10-minute averages for the day charts (time-aligned, so gaps stay gaps).
+        intraday_spark = ten_minute_means(minute_hr)
         
         record = {
             'date': dt,
@@ -920,8 +944,10 @@ def assemble(src, profile, labels_path):
                 'steps': steps,
                 'calories': cals,
                 'zones': hr_zones,
-                'zone_minutes': awake_zone_minutes(minute_hr, rhr, profile['max_hr'], profile.get('zone_max_hr'), asleep_minutes(dt, sleep_data)),
+                'zone_minutes': awake_zone_minutes(minute_hr, load_rhr, profile['max_hr'], profile.get('zone_max_hr'), asleep_minutes(dt, sleep_data)),
                 'workouts': day_workouts,
+                # Resting HR the strain and zones used (the day's own, or the last known one).
+                'load_rhr': load_rhr,
                 'intraday_hr': intraday_spark,
                 # From the per-minute averages, not the 10-minute sparkline above.
                 'hr_stats': ({'avg': int(round(sum(p['bpm'] for p in minute_hr) / len(minute_hr))),

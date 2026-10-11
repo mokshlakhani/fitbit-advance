@@ -18,12 +18,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const WEB = process.argv.includes('--web');
 const out = join(here, WEB ? 'web' : 'www');
-const MODULES = ['engine.js', 'ingest.js', 'store.js', 'google.js', 'webauth.js', 'mobile.js', 'mobile.css'];
+const MODULES = ['engine.js', 'ingest.js', 'store.js', 'google.js', 'webauth.js', 'mobile.js', 'mobile.css', 'takeout.js'];
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'm'), { recursive: true });
 for (const f of ['styles.css', 'icons.js', 'app.js']) cpSync(join(root, f), join(out, f));
 for (const f of MODULES) cpSync(join(here, 'src', f), join(out, 'm', f));
+// Takeout import (VO₂ max, only loaded when used) needs its unzip library (MIT).
+cpSync(join(here, 'node_modules', 'fflate', 'esm', 'browser.js'), join(out, 'm', 'fflate.js'));
 
 let html = readFileSync(join(root, 'index.html'), 'utf8');
 html = html.replace(/(<link rel="stylesheet" href="styles\.css[^"]*">)/, '$1\n  <link rel="stylesheet" href="m/mobile.css">');
@@ -39,9 +41,6 @@ const appConfig = {
 };
 
 if (WEB) {
-  // Takeout import (only loaded when used) and its unzip library (MIT).
-  cpSync(join(here, 'src', 'takeout.js'), join(out, 'm', 'takeout.js'));
-  cpSync(join(here, 'node_modules', 'fflate', 'esm', 'browser.js'), join(out, 'm', 'fflate.js'));
   cpSync(join(here, 'src', 'icons'), join(out, 'icons'), { recursive: true });
   // Privacy policy and terms, linked from the Google sign-in consent screen.
   cpSync(join(here, 'policy'), out, { recursive: true });

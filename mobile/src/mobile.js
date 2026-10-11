@@ -16,7 +16,7 @@ const AUTO_SYNC_MS = 5 * 60 * 1000;
 const SILENT_REDIRECT_GAP_MS = 10 * 60 * 1000;
 // Bump when engine.js changes what it computes, so phones recompute instead of
 // showing a cached dashboard from the old version.
-const ENGINE_VERSION = 10;
+const ENGINE_VERSION = 11;
 
 const cap = window.Capacitor;
 const NATIVE = Boolean(cap?.isNativePlatform?.());
@@ -241,18 +241,20 @@ async function runSync({ background = false, manual = false } = {}) {
 
 // Older days and the profile, after the dashboard has updated. Quiet: the sync
 // button doesn't spin for it.
-let history = null;
+// (Not called `history`: that would hide window.history, which the Android
+// back button uses.)
+let historyRun = null;
 function runHistory(historyDays) {
-  if (history) return history;
-  history = sync({ getToken, phase: 'history', days: SYNC_DAYS, historyDays, backfillLimit: { 'heart-rate': HR_BACKFILL_PER_SYNC } })
+  if (historyRun) return historyRun;
+  historyRun = sync({ getToken, phase: 'history', days: SYNC_DAYS, historyDays, backfillLimit: { 'heart-rate': HR_BACKFILL_PER_SYNC } })
     .then(async report => {
       if (report.fetched) await recomputeAndShow();
       const note = report.pending ? `${report.pending} older days of heart rate still to download; they’ll come in over the next few syncs.` : '';
       if (ui.state !== 'syncing') setUi(ui.state, ui.detail, ui.error, note);
     })
     .catch(() => { /* the next sync retries */ })
-    .finally(() => { history = null; });
-  return history;
+    .finally(() => { historyRun = null; });
+  return historyRun;
 }
 
 // ---------- Takeout (VO2 max) ----------
@@ -297,7 +299,9 @@ function setUi(state, detail = '', error = '', note = ui.note) {
     btn.setAttribute('aria-label', state === 'syncing' ? 'Syncing' : 'Sync and settings');
   }
   const sheet = document.getElementById('syncSheet');
-  if (sheet && !sheet.hidden) renderSheet();
+  // Only the status part: redrawing the whole sheet would wipe a half-typed
+  // feedback message or sleep score.
+  if (sheet && !sheet.hidden) renderSheetStatus();
   renderFirstSync();
 }
 
@@ -375,17 +379,33 @@ async function feedbackHtml() {
     </form>`;
 }
 
-let sheetMode = 'all'; // 'feedback' when opened from the feedback button
-async function renderSheet(mode = sheetMode) {
-  const sheet = document.getElementById('syncSheet');
-  const [signedIn, lastSync, lab, prof, vo2, lastSeconds, tempUnit] = [
-    await store.get('signedIn'), await store.get('lastSync'), await labels(), await profile(),
-    (await store.get('takeoutVo2')) || {}, await store.get('lastSyncSeconds'), await store.get('tempUnit'),
-  ];
-  const date = viewedDate();
+// The sheet's live part: sync status, errors and the sync / sign-in button.
+async function sheetStatusHtml() {
+  const [signedIn, lastSync, lastSeconds] = [await store.get('signedIn'), await store.get('lastSync'), await store.get('lastSyncSeconds')];
   const status = ui.state === 'syncing'
     ? `<span class="m-spin"></span>${esc(ui.detail || 'Syncing')}`
     : signedIn ? `Last synced ${ago(lastSync)}${lastSeconds ? ` · took ${lastSeconds < 10 ? lastSeconds.toFixed(1) : Math.round(lastSeconds)} s` : ''}` : 'Not connected to Google';
+  return `<p class="m-status">${status}</p>
+    ${ui.error ? `<p class="m-error">${esc(ui.error)}</p>` : ''}
+    ${ui.note ? `<p class="m-note">${esc(ui.note)}</p>` : ''}
+    ${signedIn && ui.state !== 'signedOut'
+      ? `<button class="m-btn primary" data-act="sync" ${ui.state === 'syncing' ? 'disabled' : ''}>Sync now</button>`
+      : '<button class="m-btn primary" data-act="signin">Sign in with Google</button>'}`;
+}
+
+async function renderSheetStatus() {
+  const live = document.querySelector('#syncSheet .m-live');
+  if (live) live.innerHTML = await sheetStatusHtml();
+}
+
+let sheetMode = 'all'; // 'feedback' when opened from the feedback button
+async function renderSheet(mode = sheetMode) {
+  const sheet = document.getElementById('syncSheet');
+  const [signedIn, lab, prof, vo2, tempUnit] = [
+    await store.get('signedIn'), await labels(), await profile(),
+    (await store.get('takeoutVo2')) || {}, await store.get('tempUnit'),
+  ];
+  const date = viewedDate();
   const sexOpt = (v, label) => `<option value="${v}" ${(prof.sex || '') === v ? 'selected' : ''}>${label}</option>`;
   if (mode === 'feedback') {
     sheet.querySelector('.m-body').innerHTML = await feedbackHtml();
@@ -394,18 +414,13 @@ async function renderSheet(mode = sheetMode) {
   }
   sheet.querySelector('.m-body').innerHTML = `
     <h2 class="m-title">Sync</h2>
-    <p class="m-status">${status}</p>
-    ${ui.error ? `<p class="m-error">${esc(ui.error)}</p>` : ''}
-    ${ui.note ? `<p class="m-note">${esc(ui.note)}</p>` : ''}
-    ${signedIn && ui.state !== 'signedOut'
-      ? `<button class="m-btn primary" data-act="sync" ${ui.state === 'syncing' ? 'disabled' : ''}>Sync now</button>`
-      : '<button class="m-btn primary" data-act="signin">Sign in with Google</button>'}
+    <div class="m-live">${await sheetStatusHtml()}</div>
     <p class="m-note">Updates when you open the app and every 5 minutes while it’s open. New readings appear after your Fitbit syncs to the Fitbit app.</p>
 
     <h2 class="m-title">View</h2>
     ${(() => { const m = window.DataStrap?.getMode?.() || 'std'; return `<div class="mode-switch" role="group" aria-label="View mode" data-mode="${m}"><span class="thumb" aria-hidden="true"></span>
       <button type="button" data-set-mode="std" aria-pressed="${m === 'std'}">Standard</button><button type="button" data-set-mode="perf" aria-pressed="${m === 'perf'}">Performance</button></div>`; })()}
-    <p class="m-note">Standard shows the everyday numbers. Performance adds recovery, strain, body age and the detail behind them.</p>
+    <p class="m-note">Standard shows the everyday numbers. Performance adds strain, stress, body age, VO₂ max and what’s behind your recovery and sleep scores.</p>
 
     <h2 class="m-title">Fitbit app sleep score</h2>
     <p class="m-note">Google doesn’t share the app’s sleep score, so DataStrap estimates it. Entering the app’s score for a night uses the real value and teaches the estimate.</p>
@@ -781,7 +796,7 @@ setInterval(() => {
 cap?.Plugins?.App?.addListener?.('backButton', ({ canGoBack }) => {
   const sheet = document.getElementById('syncSheet');
   if (sheet && !sheet.hidden) closeSheet();
-  else if (canGoBack) history.back();
+  else if (canGoBack) window.history.back();
   else cap.Plugins.App.exitApp();
 });
 

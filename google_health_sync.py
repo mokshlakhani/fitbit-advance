@@ -219,7 +219,7 @@ def sync_profile(token):
     ]:
         try:
             body = fn()
-        except urllib.error.HTTPError:
+        except OSError:  # HTTP errors and network problems alike: best effort
             continue
         if label == 'profile':
             # The profile's `name` field is the resource ID (users/…/profile),
@@ -233,13 +233,12 @@ def sync_profile(token):
             v = _latest(token, *args)
             if v:
                 found[key] = round(v / scale, 1)
-        except (urllib.error.HTTPError, KeyError, ValueError):
+        except (OSError, KeyError, ValueError):
             pass
     return profile_store.save(found)
 
 
 API_BASE = 'https://health.googleapis.com/v4/users/me/dataTypes'
-OUT_DIR = 'api_data'
 
 # data type id -> (filter field, filter kind). Kind decides the value format:
 # 'date' = YYYY-MM-DD, 'civil' = YYYY-MM-DDT00:00:00, 'utc' = RFC-3339.
@@ -446,6 +445,9 @@ def sync(days, interactive=False, log=print):
                     return is_datastrap(p) and civil is not None and lo <= civil < hi and point_key(p) not in fresh
         except urllib.error.HTTPError as e:
             log(f"  {data_type:38s} FAILED {e.code}: {e.read().decode('utf-8')[:300]}")
+            continue
+        except OSError as e:  # network: timeouts, resets, no connection
+            log(f"  {data_type:38s} FAILED: {e}")
             continue
         total = merge_into_file(os.path.join(OUT_DIR, f"{data_type}.json"), points, drop)
         log(f"  {data_type:38s} {len(points):8d} points ({total} stored)")

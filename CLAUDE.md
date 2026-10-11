@@ -36,7 +36,7 @@ Git-ignored, per user: `profile.json`, `google_tokens.json`, `credentials.json` 
 
 ### A. Recovery (`wellness/readiness_composite.dart`)
 - Each vital is compared with its own baseline: its most recent 14 readings from the previous 28 days (`BASELINE_READINGS`, `BASELINE_MAX_AGE`). With fewer than 14, that vital sits out. Robust z: `z = (v − median) / (1.4826·MAD)`, falling back to the standard deviation when the MAD is 0. Resting HR is also dropped when its whole-bpm baseline has under 1 bpm of spread.
-- Orientation and weights: HRV 0.40 (higher is better), resting HR 0.30 (lower is better), breathing rate 0.20 and skin temperature 0.10 ("steady": `1.5/√(2π) − max(z,0) − 0.5·max(−z,0)`, so a rise costs twice a fall and an ordinary night averages zero). Weights are renormalised over the vitals present.
+- Orientation and weights: HRV 0.40 (higher is better), resting HR 0.30 (lower is better), breathing rate 0.20 and skin temperature 0.10 ("steady": `0.75 − max(z,0) − 0.5·max(−z,0)`, so a rise costs twice a fall and an ordinary night averages zero: 0.75·E|z|, with E|z| ≈ 1.0 for a night's robust z against a 14-reading baseline). Weights are renormalised over the vitals present.
 - There's no score ("Calibrating") unless at least 2 vitals with at least 0.5 of the weight qualify (OpenStrap's minimums).
 - `composite_z = Σ wᵢ·oᵢ / Σ wᵢ`; score = `100 / (1 + e^(−composite_z))`, so a typical night is 50. Tiers: ≥67 optimal (strain 14–18), 34–66 adequate (10–14), <34 low (<10).
 - Drivers: each vital's points are its share of (score − 50), so they add up to the score's distance from 50.
@@ -44,16 +44,18 @@ Git-ignored, per user: `profile.json`, `google_tokens.json`, `credentials.json` 
 ### B. Strain (`clinical/load_trimp.dart`)
 - `HRR = clamp((HR − RHR)/(HRmax − RHR), 0, 1)`. TRIMP = Σ minutes with HRR ≥ 0.30 (ACSM light activity; `ACTIVE_HRR`) of HRR·a·e^(b·HRR), with Banister coefficients (men a=0.64, b=1.92; women a=0.86, b=1.67; midpoint if unknown). Sleep and sitting don't add strain.
 - Strain = 21·ln(1 + TRIMP)/ln(7201).
+- Fitbit often has no resting HR for today yet: strain, zone minutes and workouts then use the most recent one from the last 7 days (`LOAD_RHR_DAYS`, saved as `strain.load_rhr`); `cardiovascular.rhr` stays empty.
+- `strain.intraday_hr` holds 10-minute averages (time-aligned) for the day charts; `hr_stats` (avg/min/max) comes from the per-minute averages.
 
 ### C. Fitness age, VO₂ max percentile, nightly stress
 - VO₂ max norms: Loe et al. 2013, PLOS ONE 8:e64319 (HUNT3 Fitness Study), Table 2: mean and SD by sex and decade (20–29 … 70+). Interpolated between decade midpoints; the average of the men's and women's norms if sex is unknown.
 - Percentile = normal CDF of `(VO₂ − mean)/SD` for the user's age and sex. Tiers: ≥90 elite, ≥75 excellent, ≥50 above average, ≥25 below average, else low.
 - Fitness age is the age whose average VO₂ max equals the user's, limited to 25–75 (flagged `fitness_age_limit` = `lower`/`upper` at the ends).
 - VO₂ max is carried forward for at most 30 days after a measurement (the API has none; it comes from Takeout, or the phone app's Takeout import).
-- Nightly stress (0–100): `100 / (1 + e^(−s))` with `s = (z_RHR − z_HRV)/2` against the same 14-reading baselines. 50 is a typical night. (It isn't a Baevsky index: that needs beat-to-beat data.)
+- Nightly stress (0–100): `100 / (1 + e^(−s))` with `s = (z_RHR − z_HRV)/2` against the same 14-reading baselines (z_RHR = 0 when its baseline has under 1 bpm of spread, as in recovery). 50 is a typical night. (It isn't a Baevsky index: that needs beat-to-beat data.)
 
 ### C2. Workouts
-- Each workout (Takeout `exercise-*.json` and the API's `exercise` type) is rebuilt from raw heart rate, a reading about every 2 s: Takeout `heart_rate-*.json` and the API's full-resolution files. Only readings inside the workout plus 150 s after it are kept (`workout_hr` in `src`).
+- Each workout (Takeout `exercise-*.json`, every file, and the API's `exercise` type) is rebuilt from raw heart rate, a reading about every 2 s: Takeout `heart_rate-*.json` and the API's full-resolution files. Only readings inside the workout plus 150 s after it are kept (`workout_hr` in `src`).
 - Each reading counts for the time until the next one, capped at 10 s. Results: peak HR, time-weighted average HR, time in each zone to the second, the workout's own TRIMP and strain (same formula as the day), and heart-rate recovery (the mean of the last 10 s minus the mean ±5 s around 60 s and 120 s after the end).
 - Falls back to per-minute averages when a day has no raw readings (`hr_resolution`: `second` or `minute`).
 - **Log +** (phone and web app home page): writes a workout to the Google Health API (`exercise` data type, `activity_and_fitness.writeonly`, asked for only on the first save), so it appears in the Fitbit app. All 181 API exercise types, labelled and grouped in `ACTIVITY_FAMILIES` (app.js). The API's `google-sources` filter hides every app's own writes, so syncs fetch DataStrap's workouts separately (`is_datastrap`: the OAuth project number or the Android package) and drop ones deleted elsewhere. Workouts carry `id` and `logged_in_app`; only those can be deleted (workout page).
@@ -76,7 +78,7 @@ Git-ignored, per user: `profile.json`, `google_tokens.json`, `credentials.json` 
 - Shown with one decimal, floor 17, cap ±8 years under 30 (±10 from 30), and a ± range (model error 3 years under 30, 2 from 30).
 - Like WHOOP Age, it moves slowly: drivers are averaged over the last 180 days, and the value and pace are worked out each Monday (`UPDATE_WEEKDAY`) and held for the week; each day's `bio_age.updated` is that Monday. A Monday needs a recovery score on 21 of the last 31 nights (`MIN_RECOVERIES`), otherwise the last good value carries on ("Calibrating" before the first).
 - Needs 3 or more drivers with 14 days of data, including VO₂ max or resting HR; otherwise "Calibrating".
-- Pace: the 30-day against the 180-day body age, with a 0.3-year dead band. Needs 90 days of history.
+- Pace: 1 + (change − 0.3 y soft dead band) / years between the window centres, where change is the 30-day minus the 180-day body age; limited to −1…3. Needs 90 days of history.
 - Mirrored exactly in `mobile/src/engine.js` (`applyBodyAge`); `mobile/test/synthetic_parity.mjs` covers women, unknown sex, age 45 and pace.
 
 ## 4b. Web app sign-in

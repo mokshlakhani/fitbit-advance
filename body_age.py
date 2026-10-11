@@ -19,8 +19,9 @@ MIN_RECOVERIES, RECOVERY_SPAN = 21, 31  # nights with a recovery score needed in
 MIN_DAYS = 14
 FLOOR = 17.0
 PACE_SHORT, PACE_LONG, PACE_MIN_HISTORY = 30, 180, 90
-# Body age wobbles 0.1-0.25 years month to month from noise alone, so changes
-# smaller than this between the 30-day and long-term windows read as steady.
+# Body age wobbles 0.1-0.25 years month to month from noise alone, so this much
+# of the change between the 30-day and long-term windows is treated as noise
+# and taken off (a soft dead band: pace stays continuous, steady inside it).
 PACE_DEADBAND = 0.3
 STRENGTH_RE = re.compile(r'weight|strength|machine|lift|resistance|crossfit|kettlebell|calisthenic', re.I)
 
@@ -349,7 +350,8 @@ def weekly_value(records, i, profile, pairs, first):
             if short and longb and short['status'] == 'ok' and longb['status'] == 'ok':
                 dt = (long_w - PACE_SHORT) / 2.0 / 365.0
                 change = short['raw_delta'] - longb['raw_delta']
-                pace = 1.0 if abs(change) < PACE_DEADBAND else 1.0 + change / dt
+                beyond = math.copysign(max(0.0, abs(change) - PACE_DEADBAND), change)
+                pace = 1.0 + beyond / dt
                 ba['pace'] = round(min(3.0, max(-1.0, pace)), 1)
                 ba['pace_change'] = round(change, 1)
     return ba

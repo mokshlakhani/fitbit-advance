@@ -96,6 +96,20 @@ export function trimpAndStrain(minuteHr, restingHr, maxHr = 190, sex = null, zon
   return [pyRound(trimp, 1), strain, pct];
 }
 
+const LOAD_RHR_DAYS = 7;
+
+// See ten_minute_means in process_fitbit_openstrap.py.
+export function tenMinuteMeans(minuteHr) {
+  const blocks = new Map();
+  for (const pt of minuteHr) {
+    const [hh, mm] = pt.time.split(':');
+    const key = `${hh}:${Math.floor(Number(mm) / 10)}0`;
+    if (!blocks.has(key)) blocks.set(key, []);
+    blocks.get(key).push(pt.bpm);
+  }
+  return [...blocks.keys()].sort().map(k => { const v = blocks.get(k); return { time: k, bpm: pyInt(v.reduce((a, b) => a + b, 0) / v.length) }; });
+}
+
 // See asleep_minutes in process_fitbit_openstrap.py. Times are local wall
 // clock, so they're handled as UTC to keep the arithmetic free of DST.
 export function asleepMinutes(dt, sleepOf) {
@@ -217,8 +231,9 @@ const RECOVERY_INPUTS = [
   ['temp', 'Skin Temperature', 0.10, 'steady'],
 ];
 // Breathing rate and skin temperature: a change either way is a warning sign, a
-// rise twice as much as a fall, centred so an ordinary night adds nothing on average.
-const STEADY_CENTER = 1.5 / Math.sqrt(2 * Math.PI);
+// rise twice as much as a fall, centred so an ordinary night adds nothing on
+// average: 0.75·E|z|, with E|z| ≈ 1.0 for a night against its 14-reading baseline.
+const STEADY_CENTER = 0.75;
 
 function shiftIso(iso, days) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -266,7 +281,9 @@ export function nightlyStress(rmssd, rhr, histories, dt) {
   const baseHrv = baselineFor(histories.hrv, dt);
   const baseRhr = baselineFor(histories.rhr, dt);
   if (baseHrv === null || baseRhr === null) return null;
-  const s = (robustZ(rhr, baseRhr) - robustZ(rmssd, baseHrv)) / 2.0;
+  // A resting-HR baseline with under 1 bpm of spread can't measure a change.
+  const zRhr = std(baseRhr) >= 1.0 ? robustZ(rhr, baseRhr) : 0.0;
+  const s = (zRhr - robustZ(rmssd, baseHrv)) / 2.0;
   return pyInt(100.0 / (1.0 + Math.exp(-s)));
 }
 
@@ -371,6 +388,8 @@ export function assemble(src, profile, labels, { today } = {}) {
   if (!allDates.length) throw new Error('No data yet.');
 
   const histories = { hrv: [], rhr: [], resp: [], temp: [] };
+  let lastRhr = null;
+  let lastRhrDate = null;
   let lastVo2 = null;
   let lastVo2Date = null;
   const records = [];
@@ -397,10 +416,14 @@ export function assemble(src, profile, labels, { today } = {}) {
     else if (recoveryScore >= 34) tier = ['Adequate', '#F59E0B', '10.0 – 14.0', 'Moderate recovery. Maintain steady volume without excessive overreaching.'];
     else tier = ['Low / Recovery', '#EF4444', '< 10.0', 'Autonomic indicators show elevated fatigue. Prioritize sleep and active recovery.'];
 
+    // No resting HR for the day yet: strain and zones use the last one (≤ LOAD_RHR_DAYS old).
+    if (truthy(rhr)) { lastRhr = rhr; lastRhrDate = dt; }
+    const sinceRhr = lastRhrDate ? Math.round((Date.parse(`${dt}T00:00:00Z`) - Date.parse(`${lastRhrDate}T00:00:00Z`)) / 86400000) : null;
+    const loadRhr = truthy(rhr) ? rhr : (sinceRhr !== null && sinceRhr <= LOAD_RHR_DAYS ? lastRhr : null);
     const minuteHr = get('intraday_hr', dt) || [];
-    const [trimp, strain, zones] = trimpAndStrain(minuteHr, rhr, profile.max_hr, profile.sex, profile.zone_max_hr);
+    const [trimp, strain, zones] = trimpAndStrain(minuteHr, loadRhr, profile.max_hr, profile.sex, profile.zone_max_hr);
     const daySamples = src.workout_hr ? src.workout_hr[dt] : undefined;
-    const dayWorkouts = workouts.map(w => analyseWorkout(w, minuteHr, daySamples, rhr, profile.max_hr, profile.sex, profile.zone_max_hr));
+    const dayWorkouts = workouts.map(w => analyseWorkout(w, minuteHr, daySamples, loadRhr, profile.max_hr, profile.sex, profile.zone_max_hr));
 
     const asleep = truthy(sleepEntry.minutesAsleep) ? sleepEntry.minutesAsleep : null;
     const hasSleep = asleep !== null;
@@ -409,8 +432,7 @@ export function assemble(src, profile, labels, { today } = {}) {
     const debt = hasSleep ? Math.max(0, 480 - asleep) : null;
     const fitness = fitnessProfile(profile.chronological_age, profile.sex, vo2);
     const stress = nightlyStress(rmssd, rhr, histories, dt);
-    const spark = [];
-    for (let i = 0; i < minuteHr.length; i += 10) spark.push(minuteHr[i]);
+    const spark = tenMinuteMeans(minuteHr);
     const fmtHm = m => `${Math.floor(m / 60)}h ${m % 60}m`;
 
     records.push({
@@ -452,8 +474,9 @@ export function assemble(src, profile, labels, { today } = {}) {
         steps,
         calories: cals,
         zones,
-        zone_minutes: awakeZoneMinutes(minuteHr, rhr, profile.max_hr, profile.zone_max_hr, asleepMinutes(dt, d => get('sleep', d))),
+        zone_minutes: awakeZoneMinutes(minuteHr, loadRhr, profile.max_hr, profile.zone_max_hr, asleepMinutes(dt, d => get('sleep', d))),
         workouts: dayWorkouts,
+        load_rhr: loadRhr,
         intraday_hr: spark,
         hr_stats: minuteHr.length ? (() => {
           let sum = 0;
@@ -921,7 +944,9 @@ function baWeekly(records, i, profile, pairs, first) {
       if (short && longb && short.status === 'ok' && longb.status === 'ok') {
         const dt = (longW - PACE_SHORT) / 2.0 / 365.0;
         const change = short.raw_delta - longb.raw_delta;
-        const pace = Math.abs(change) < PACE_DEADBAND ? 1.0 : 1.0 + change / dt;
+        // Soft dead band: the first PACE_DEADBAND years of change are noise.
+        const beyond = Math.sign(change) * Math.max(0.0, Math.abs(change) - PACE_DEADBAND);
+        const pace = 1.0 + beyond / dt;
         ba.pace = pyRound(Math.min(3.0, Math.max(-1.0, pace)), 1);
         ba.pace_change = pyRound(change, 1);
       }

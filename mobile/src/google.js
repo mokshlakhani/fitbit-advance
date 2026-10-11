@@ -283,8 +283,11 @@ export async function sync({ getToken, phase = 'recent', days = 7, historyDays =
 
   const slowDue = Date.now() - ((await store.get('slowSyncAt')) || 0) > SLOW_EVERY_MS;
   if (phase === 'recent' && slowDue) {
-    const start = addDays(end, -(days + 1));
     for (const [type, [field, kind]] of Object.entries(SUMMARY_TYPES)) {
+      // Until a type's whole history window has downloaded once (it can fail
+      // on the first sync), keep asking for all of it, not just recent days.
+      const covered = await store.get(`covered:${type}`);
+      const start = addDays(end, -((covered ? days : Math.max(days, historyDays)) + 1));
       tasks.push(guard(async () => {
         const filter = type === 'sleep'
           ? `${field} >= "${bound(start, kind)}"` // sleep only supports >= on end_time
@@ -310,6 +313,7 @@ export async function sync({ getToken, phase = 'recent', days = 7, historyDays =
           merged[k] = p;
         }
         if (changed) await store.set(`points:${type}`, merged);
+        if (!covered) await store.set(`covered:${type}`, true);
         return changed;
       }));
     }
