@@ -41,6 +41,8 @@ if (WEB) {
   cpSync(join(here, 'src', 'takeout.js'), join(out, 'm', 'takeout.js'));
   cpSync(join(here, 'node_modules', 'fflate', 'esm', 'browser.js'), join(out, 'm', 'fflate.js'));
   cpSync(join(here, 'src', 'icons'), join(out, 'icons'), { recursive: true });
+  // Privacy policy and terms, linked from the Google sign-in consent screen.
+  cpSync(join(here, 'policy'), out, { recursive: true });
 
   const version = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root }).toString().trim() + '-' + Date.now().toString(36);
   writeFileSync(join(out, 'sw.js'), readFileSync(join(here, 'src', 'sw.js'), 'utf8').replace('__VERSION__', version));
