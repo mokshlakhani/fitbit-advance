@@ -79,6 +79,9 @@ Git-ignored, per user: `profile.json`, `google_tokens.json`, `credentials.json` 
 - Pace: the 30-day against the 180-day body age, with a 0.3-year dead band. Needs 90 days of history.
 - Mirrored exactly in `mobile/src/engine.js` (`applyBodyAge`); `mobile/test/synthetic_parity.mjs` covers women, unknown sex, age 45 and pace.
 
+## 4b. Web app sign-in
+- Browser OAuth gives one-hour tokens and no refresh token. `token-server/` is a Cloudflare Worker that holds the web client's secret (a Worker secret, never in the repo) and exchanges authorization codes (PKCE) and refresh tokens; it stores and logs nothing and answers only `ALLOWED_ORIGINS`. With `tokenServer` set in `mobile/web.config.json`, `webauth.js` uses the code flow and renews in the background; without it, the implicit flow with silent `prompt=none` redirects. Deploy: `cd token-server && npx wrangler login && npx wrangler secret put GOOGLE_CLIENT_SECRET && npx wrangler deploy`.
+
 ## 5. Gotchas
 - **Google Cloud OAuth brand rejected**: app names can't contain "Fitbit"/"Google"; leave domain/privacy-policy fields blank for testing.
 - **Shared OAuth client**: must be a *Desktop app* client (any loopback port allowed). The consent screen must be **In production** for other users (Testing mode only admits listed test users and expires refresh tokens after 7 days). Unverified apps show a warning and are capped at 100 users.

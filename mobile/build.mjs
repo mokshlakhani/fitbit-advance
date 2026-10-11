@@ -34,6 +34,8 @@ const fileConfig = existsSync(join(here, 'web.config.json')) ? JSON.parse(readFi
 const appConfig = {
   googleClientId: WEB ? (process.env.DATASTRAP_GOOGLE_CLIENT_ID || fileConfig.googleClientId || '') : '',
   feedback: fileConfig.feedback || null,
+  // Sign-in helper (token-server/) for long-lasting web sign-in; optional.
+  tokenServer: WEB ? (fileConfig.tokenServer || null) : null,
 };
 
 if (WEB) {

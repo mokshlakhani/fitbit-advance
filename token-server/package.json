@@ -1,0 +1,12 @@
+{
+  "name": "datastrap-token",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "test": "node test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

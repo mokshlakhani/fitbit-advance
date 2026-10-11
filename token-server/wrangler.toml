@@ -1,0 +1,14 @@
+name = "datastrap-token"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+# The web app's Google client ID (public) and its addresses.
+GOOGLE_CLIENT_ID = "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleusercontent.com"
+ALLOWED_ORIGINS = "https://mokshlakhani.github.io,http://localhost:8092"
+
+# The client secret is NOT here. Set it once with:
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
+[observability]
+enabled = false
