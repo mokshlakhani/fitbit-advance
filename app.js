@@ -2309,6 +2309,7 @@ function renderTabbar() {
   const iso = day().date;
   const accentOf = t => (t.id === 'today' ? 'var(--text)' : t.id === 'recovery' ? 'var(--good)' : GROUPS[t.id === 'strain' ? 'activity' : t.id].color);
   if (bar.dataset.mode !== state.mode) { bar.dataset.mode = state.mode; tabIndX = null; }
+  bar.style.gridTemplateColumns = `repeat(${TABS.length}, 1fr)`;
   bar.innerHTML = '<span class="tab-ind" aria-hidden="true"></span>' + TABS.map(t => `<a href="${t.href(iso)}" class="tab ${t.id === active ? 'on' : ''} ${t.id === active && lastTab !== null && lastTab !== active ? 'pop' : ''}" ${t.id === active ? 'aria-current="page"' : ''} data-tab="${t.id}" style="--accent:${accentOf(t)}">
       <span class="tab-icon">${ph(t.icon, '', t.id === active ? 'fill' : 'regular')}</span><span class="tab-label">${t.label}</span></a>`).join('');
   const moved = lastTab !== null && lastTab !== active;
