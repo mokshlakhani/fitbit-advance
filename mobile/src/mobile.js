@@ -186,14 +186,14 @@ function failed(message, detail) {
 // `background`: the 5-minute timer. The web app's Google pass lasts an hour and
 // renewing it means a trip to Google and back, so a background sync never does
 // that mid-use; it waits for the next open, return to the app, or ↻.
-async function runSync({ background = false } = {}) {
+async function runSync({ background = false, manual = false } = {}) {
   if (syncing) return syncing;
   syncing = (async () => {
     try {
       if (!(await store.get('signedIn'))) { setUi('signedOut'); return; }
       if (!NATIVE && !(await webauth.hasValidToken())) {
         if (background) return;
-        if (document.visibilityState === 'visible' && silentRefreshAllowed()) {
+        if (document.visibilityState === 'visible' && (manual || silentRefreshAllowed())) {
           setUi('syncing', 'Refreshing Google sign-in');
           await refreshSilently().catch(e => setUi('error', '', failed('Sign-in failed. Try again.', e)));
         } else {
@@ -224,7 +224,7 @@ async function runSync({ background = false } = {}) {
     } catch (err) {
       if (err.code === 'NEEDS_REDIRECT' && background) {
         // Leave it for the next open, return or ↻.
-      } else if (err.code === 'NEEDS_REDIRECT' && silentRefreshAllowed() && document.visibilityState === 'visible') {
+      } else if (err.code === 'NEEDS_REDIRECT' && (manual || silentRefreshAllowed()) && document.visibilityState === 'visible') {
         await refreshSilently().catch(e => setUi('error', '', failed('Sign-in failed. Try again.', e)));
       } else if (['NEEDS_CONSENT', 'NEEDS_REDIRECT'].includes(err.code) || err.status === 401 || err.status === 403) {
         await store.set('signedIn', false);
@@ -397,7 +397,7 @@ async function renderSheet(mode = sheetMode) {
     <p class="m-status">${status}</p>
     ${ui.error ? `<p class="m-error">${esc(ui.error)}</p>` : ''}
     ${ui.note ? `<p class="m-note">${esc(ui.note)}</p>` : ''}
-    ${signedIn
+    ${signedIn && ui.state !== 'signedOut'
       ? `<button class="m-btn primary" data-act="sync" ${ui.state === 'syncing' ? 'disabled' : ''}>Sync now</button>`
       : '<button class="m-btn primary" data-act="signin">Sign in with Google</button>'}
     <p class="m-note">Updates when you open the app and every 5 minutes while it’s open. New readings appear after your Fitbit syncs to the Fitbit app.</p>
@@ -498,7 +498,7 @@ function mountUi() {
   sheet.addEventListener('click', e => {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'close') closeSheet();
-    if (act === 'sync') runSync();
+    if (act === 'sync') runSync({ manual: true });
     if (act === 'signin') signIn();
     if (act === 'signout') signOut();
   });
@@ -563,7 +563,7 @@ function showFirstSync() {
       <button class="m-btn primary" id="firstSyncRetry" hidden>Try again</button>
     </section>
     <div class="m-skeleton" aria-hidden="true"><i></i><i></i><i></i><i></i></div>`;
-  document.getElementById('firstSyncRetry').addEventListener('click', () => runSync());
+  document.getElementById('firstSyncRetry').addEventListener('click', () => runSync({ manual: true }));
   renderFirstSync();
 }
 
@@ -630,7 +630,7 @@ function pullToRefresh() {
     ind.classList.add('spinning');
     ind.style.transform = '';
     ind.style.opacity = '';
-    runSync().finally(() => { ind.classList.remove('spinning'); reset(); });
+    runSync({ manual: true }).finally(() => { ind.classList.remove('spinning'); reset(); });
   });
 }
 
