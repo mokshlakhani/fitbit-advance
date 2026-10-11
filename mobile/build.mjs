@@ -68,6 +68,7 @@ if (WEB) {
   html = html
     .replace('<meta name="theme-color" content="#050506">', [
       '<meta name="theme-color" content="#050506">',
+      '<meta name="google-site-verification" content="G4N7W8UV2TrkiwGzqEbMfv3hft80QxgpQGKX02Dfopw" />',
       '<meta name="apple-mobile-web-app-capable" content="yes">',
       '<meta name="mobile-web-app-capable" content="yes">',
       '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
