@@ -74,7 +74,14 @@ if (WEB) {
       '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">',
       '<link rel="icon" type="image/png" href="icons/favicon-32.png">',
     ].join('\n  '))
-    .replace(/(<script src="app\.js[^"]*"><\/script>)/, '<script type="module" src="m/mobile.js"></script>\n  $1');
+    .replace(/(<script src="app\.js[^"]*"><\/script>)/, `<script type="module" src="m/mobile.js?b=${version}"></script>\n  $1`)
+    .replace('href="m/mobile.css"', `href="m/mobile.css?b=${version}"`);
+  // Same build stamp on the module imports, so a new version never mixes
+  // with cached old modules.
+  for (const f of ['mobile.js', 'google.js', 'ingest.js', 'engine.js', 'store.js', 'webauth.js', 'takeout.js']) {
+    const path = join(out, 'm', f);
+    if (existsSync(path)) writeFileSync(path, readFileSync(path, 'utf8').replace(/(from\s+|import\()(['"])\.\/([a-z]+\.js)\2/g, `$1$2./$3?b=${version}$2`));
+  }
 } else {
   // Capacitor's JS runtime (registerPlugin etc.); the native side only injects the bridge.
   cpSync(join(here, 'node_modules', '@capacitor', 'core', 'dist', 'capacitor.js'), join(out, 'm', 'capacitor.js'));
