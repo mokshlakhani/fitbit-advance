@@ -3,7 +3,7 @@
 // computes everything with engine.js on the device, and hands the result to
 // the dashboard (app.js) through window.DataStrapHost / window.DataStrap.
 import * as store from './store.js';
-import { sync, loadRaw, dashboardProfile, logWorkout as logWorkoutApi, deleteWorkout as deleteWorkoutApi } from './google.js';
+import { sync, loadRaw, dashboardProfile, logWorkout as logWorkoutApi, updateWorkout as updateWorkoutApi, deleteWorkout as deleteWorkoutApi } from './google.js';
 import { loadApiSources, mergeSources, loadWorkoutSamples, workoutUtcDays, localDayReadings } from './ingest.js';
 import { assemble } from './engine.js';
 import * as webauth from './webauth.js';
@@ -708,6 +708,8 @@ async function runWrite(job) {
   if (job.kind === 'log') {
     const e = job.entry;
     await logWorkoutApi(tok, { ...e, start: new Date(e.start) });
+  } else if (job.kind === 'update') {
+    await updateWorkoutApi(tok, job.id, { ...job.entry, start: new Date(job.entry.start) });
   } else {
     await deleteWorkoutApi(tok, job.id);
   }
@@ -724,7 +726,8 @@ async function resumePendingWrite() {
   }
   try {
     await runWrite(job);
-    window.DataStrap.toast(job.kind === 'log' ? `${job.entry.label} logged. It’ll show in the Fitbit app too.` : 'Workout deleted.');
+    window.DataStrap.toast(job.kind === 'log' ? `${job.entry.label} logged. It’ll show in the Fitbit app too.`
+      : job.kind === 'update' ? `${job.entry.label} updated.` : 'Workout deleted.');
   } catch (err) {
     window.DataStrap.toast(`Couldn’t save: ${err.message || err}`);
   }
@@ -751,6 +754,7 @@ window.DataStrapHost = {
   dayHeartRate,
   sendReport,
   logWorkout: entry => runWrite({ kind: 'log', entry }),
+  updateWorkout: (id, entry) => runWrite({ kind: 'update', id, entry }),
   deleteWorkout: id => runWrite({ kind: 'delete', id }),
   async load() {
     mountUi();

@@ -5,7 +5,8 @@ import * as store from './store.js';
 import { minuteAggregateSeconds, isDatastrap } from './ingest.js';
 import { pyRound } from './engine.js';
 
-const API = 'https://health.googleapis.com/v4/users/me';
+const API_ROOT = 'https://health.googleapis.com/v4';
+const API = `${API_ROOT}/users/me`;
 const SOURCE_FAMILY = 'users/me/dataSourceFamilies/google-sources';
 
 // data type -> [filter field, bound kind]: 'date' YYYY-MM-DD, 'civil' local midnight, 'utc' RFC-3339.
@@ -47,7 +48,8 @@ class Api {
   async request(path, { method = 'GET', body } = {}) {
     for (let attempt = 0; ; attempt++) {
       this.token ||= await this.getToken({ refresh: false });
-      const res = await fetch(`${API}/${path}`, {
+      // A data point's full resource name (users/<id>/dataTypes/...) is used as is.
+      const res = await fetch(path.startsWith('users/') ? `${API_ROOT}/${path}` : `${API}/${path}`, {
         method,
         headers: { Authorization: `Bearer ${this.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,
@@ -358,32 +360,54 @@ function civilStart(p) {
  * stores Google's copy, so it shows here straight away.
  * `start` is the local start time as a Date; `utcOffsetS` the offset there.
  */
-export async function logWorkout(getToken, { type, label, start, minutes, utcOffsetS, calories, distanceKm }) {
-  const api = new Api(getToken);
+function exerciseBody({ type, label, start, minutes, utcOffsetS, calories, distanceKm }) {
   const end = new Date(start.getTime() + minutes * 60000);
   const metrics = {};
   if (calories > 0) metrics.caloriesKcal = calories;
   if (distanceKm > 0) metrics.distanceMillimeters = Math.round(distanceKm * 1e6);
-  const res = await api.request('dataTypes/exercise/dataPoints', {
-    method: 'POST',
-    body: {
-      dataSource: { recordingMethod: 'MANUAL' },
-      exercise: {
-        interval: { startTime: rfc(start.getTime()), startUtcOffset: `${utcOffsetS}s`, endTime: rfc(end.getTime()), endUtcOffset: `${utcOffsetS}s` },
-        exerciseType: type,
-        displayName: label,
-        activeDuration: `${minutes * 60}s`,
-        ...(Object.keys(metrics).length ? { metricsSummary: metrics } : {}),
-      },
+  return {
+    dataSource: { recordingMethod: 'MANUAL' },
+    exercise: {
+      interval: { startTime: rfc(start.getTime()), startUtcOffset: `${utcOffsetS}s`, endTime: rfc(end.getTime()), endUtcOffset: `${utcOffsetS}s` },
+      exerciseType: type,
+      displayName: label,
+      activeDuration: `${minutes * 60}s`,
+      ...(Object.keys(metrics).length ? { metricsSummary: metrics } : {}),
     },
-  });
+  };
+}
+
+// Keeps Google's copy of a written workout on the phone. If the reply leaves
+// out fields (it's an operation), what was sent and the old copy fill them in,
+// so the workout still reads as logged from DataStrap.
+async function storeWorkout(point, sent, name) {
+  const merged = (await store.get('points:exercise')) || {};
+  const key = point?.name || name;
+  if (!key) return point;
+  const old = merged[key] || {};
+  merged[key] = { ...old, ...sent, ...(point && point.exercise ? point : {}), name: key, dataSource: { ...(old.dataSource || {}), ...(sent.dataSource || {}), ...(point?.dataSource || {}) } };
+  await store.set('points:exercise', merged);
+  return merged[key];
+}
+
+export async function logWorkout(getToken, entry) {
+  const api = new Api(getToken);
+  const body = exerciseBody(entry);
+  const res = await api.request('dataTypes/exercise/dataPoints', { method: 'POST', body });
   const point = res.response || res;
-  if (point?.name) {
-    const merged = (await store.get('points:exercise')) || {};
-    merged[point.name] = point;
-    await store.set('points:exercise', merged);
-  }
-  return point;
+  return point?.name ? storeWorkout(point, body) : point;
+}
+
+/**
+ * Replaces a workout this app logged (Google's write permission only covers
+ * workouts the app itself added). `name` is the data point's resource name.
+ */
+export async function updateWorkout(getToken, name, entry) {
+  const api = new Api(getToken);
+  // Only the exercise changes; where the workout came from stays as it was.
+  const body = { name, exercise: exerciseBody(entry).exercise };
+  const res = await api.request(name, { method: 'PATCH', body });
+  return storeWorkout(res.response || null, body, name);
 }
 
 /** Deletes a workout this app logged, from Google and from the phone. */

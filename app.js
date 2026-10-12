@@ -1159,10 +1159,24 @@ function renderWorkout() {
     ${zones}` : ''}
     ${extras.length ? statCards(extras) : ''}
     ${compare}
-    ${w.logged_in_app && w.id && window.DataStrapHost && window.DataStrapHost.deleteWorkout
-      ? `<button type="button" class="w-delete" data-delete-workout="${esc(w.id)}">${ph('trash')}Delete this workout</button>
-         <p class="note w-delete-note">Logged from DataStrap. Deleting removes it from Google Health and the Fitbit app too.</p>` : ''}
+    ${workoutActions(w)}
   `;
+}
+
+// Edit and delete, for workouts logged from DataStrap. Google's write permission
+// only lets an app change the workouts it added, so ones your Fitbit recorded
+// point to the Fitbit app instead.
+function workoutActions(w) {
+  const host = window.DataStrapHost;
+  if (!host || !host.deleteWorkout || state.demo) return '';
+  if (w.logged_in_app && w.id) {
+    return `<div class="w-actions">
+        ${host.updateWorkout ? `<button type="button" class="w-edit" data-edit-workout>${ph('pencil-simple')}Edit</button>` : ''}
+        <button type="button" class="w-delete" data-delete-workout="${esc(w.id)}">${ph('trash')}Delete</button>
+      </div>
+      <p class="note w-delete-note">Logged from DataStrap. Changes and deletions also apply in Google Health and the Fitbit app.</p>`;
+  }
+  return '<p class="note w-delete-note">Recorded by your Fitbit. Google only lets apps change workouts they logged themselves, so edit or delete this one in the Fitbit app.</p>';
 }
 
 const HOME_SECTIONS = {
@@ -1282,13 +1296,22 @@ function activityChips(query, selected) {
 const pad2 = n => String(n).padStart(2, '0');
 const localDateIso = t => `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
 
-function openLogSheet() {
+// `edit`: {w, iso} to change a workout logged from DataStrap (same form, filled in).
+function openLogSheet(edit = null) {
   if (document.querySelector('.log-sheet')) return;
   const now = new Date();
   // Default: a 30-minute session that has just finished, on a 5-minute mark.
-  const start = new Date(now.getTime() - 30 * 60000);
+  let start = new Date(now.getTime() - 30 * 60000);
   start.setMinutes(Math.floor(start.getMinutes() / 5) * 5, 0, 0);
   let selected = recentActivities()[0] || ACTIVITIES.find(a => a.type === 'WALKING');
+  const ew = edit && edit.w;
+  const minutes0 = ew ? Math.max(1, ew.duration_minutes || 1) : 30;
+  if (ew) {
+    const [hh, mm] = (ew.time || '00:00').split(':').map(Number);
+    start = parseDate(edit.iso);
+    start.setHours(hh, mm, 0, 0);
+    selected = activityNamed(ew.name) || null;
+  }
   const sheet = document.createElement('div');
   sheet.className = 'log-sheet';
   sheet.innerHTML = `<div class="log-scrim" data-log-close></div>
@@ -1296,7 +1319,7 @@ function openLogSheet() {
       <div class="log-grab" aria-hidden="true"></div>
       <header class="log-head">
         <button type="button" class="icon-btn log-x" data-log-close aria-label="Close">${ph('x', '', 'bold')}</button>
-        <h2 id="logTitle">Log activity</h2>
+        <h2 id="logTitle">${ew ? 'Edit activity' : 'Log activity'}</h2>
       </header>
       <label class="log-field">
         <span class="log-label">Activity</span>
@@ -1313,20 +1336,20 @@ function openLogSheet() {
           <span class="log-box">${ph('clock')}<input name="time" type="time" required value="${pad2(start.getHours())}:${pad2(start.getMinutes())}"></span></label>
       </div>
       <label class="log-field"><span class="log-label">Duration</span>
-        <span class="log-box">${ph('timer')}<input name="minutes" type="number" inputmode="numeric" min="1" max="1440" required value="30"><span class="log-unit">min</span></span></label>
-      <div class="log-quick" role="group" aria-label="Quick durations">${[15, 30, 45, 60, 90].map(m => `<button type="button" class="log-chip small ${m === 30 ? 'on' : ''}" data-min="${m}">${m < 60 ? `${m} min` : `${m / 60 % 1 ? m / 60 : m / 60} h`.replace('1.5 h', '1½ h')}</button>`).join('')}</div>
-      <details class="log-more">
+        <span class="log-box">${ph('timer')}<input name="minutes" type="number" inputmode="numeric" min="1" max="1440" required value="${minutes0}"><span class="log-unit">min</span></span></label>
+      <div class="log-quick" role="group" aria-label="Quick durations">${[15, 30, 45, 60, 90].map(m => `<button type="button" class="log-chip small ${m === minutes0 ? 'on' : ''}" data-min="${m}">${m < 60 ? `${m} min` : `${m / 60 % 1 ? m / 60 : m / 60} h`.replace('1.5 h', '1½ h')}</button>`).join('')}</div>
+      <details class="log-more" ${ew && (ew.calories || ew.distance_km) ? 'open' : ''}>
         <summary>Optional information</summary>
         <div class="log-pair">
           <label class="log-field"><span class="log-label">Calories</span>
-            <span class="log-box">${ph('flame')}<input name="calories" type="number" inputmode="numeric" min="0" max="10000" placeholder="—"><span class="log-unit">kcal</span></span></label>
+            <span class="log-box">${ph('flame')}<input name="calories" type="number" inputmode="numeric" min="0" max="10000" placeholder="—" value="${ew && ew.calories ? ew.calories : ''}"><span class="log-unit">kcal</span></span></label>
           <label class="log-field log-distance"><span class="log-label">Distance</span>
-            <span class="log-box">${ph('footprints')}<input name="distance" type="number" inputmode="decimal" min="0" max="1000" step="0.01" placeholder="—"><span class="log-unit">km</span></span></label>
+            <span class="log-box">${ph('footprints')}<input name="distance" type="number" inputmode="decimal" min="0" max="1000" step="0.01" placeholder="—" value="${ew && ew.distance_km ? ew.distance_km : ''}"><span class="log-unit">km</span></span></label>
         </div>
       </details>
       <p class="log-error" role="alert" hidden></p>
-      <p class="log-note">Saved to Google Health, so it shows in the Fitbit app too.</p>
-      <button type="submit" class="log-save">Save</button>
+      <p class="log-note">${ew ? 'Changes are saved to Google Health and show in the Fitbit app too.' : 'Saved to Google Health, so it shows in the Fitbit app too.'}</p>
+      <button type="submit" class="log-save">${ew ? 'Save changes' : 'Save'}</button>
     </form>`;
   document.body.appendChild(sheet);
   document.body.classList.add('log-open');
@@ -1394,18 +1417,28 @@ function openLogSheet() {
     showErr('');
     save.disabled = true;
     save.textContent = 'Saving…';
+    const entry = {
+      type: selected.type, label: selected.label, start: startAt.toISOString(), minutes,
+      utcOffsetS: -startAt.getTimezoneOffset() * 60,
+      calories: Number(f.calories.value) || 0,
+      distanceKm: selected.distance ? Number(f.distance.value) || 0 : 0,
+    };
     try {
-      await window.DataStrapHost.logWorkout({
-        type: selected.type, label: selected.label, start: startAt.toISOString(), minutes,
-        utcOffsetS: -startAt.getTimezoneOffset() * 60,
-        calories: Number(f.calories.value) || 0,
-        distanceKm: selected.distance ? Number(f.distance.value) || 0 : 0,
-      });
-      close();
-      toast(`${selected.label} logged. It’ll show in the Fitbit app too.`);
+      if (ew) {
+        // The workout may move to another day or position: leave its page first,
+        // for that day's activity list.
+        go(hrefMetric(activityKey(), 'day', localDateIso(startAt)), { replace: true });
+        await window.DataStrapHost.updateWorkout(ew.id, entry);
+        close();
+        toast(`${selected.label} updated.`);
+      } else {
+        await window.DataStrapHost.logWorkout(entry);
+        close();
+        toast(`${selected.label} logged. It’ll show in the Fitbit app too.`);
+      }
     } catch (error) {
       save.disabled = false;
-      save.textContent = 'Save';
+      save.textContent = ew ? 'Save changes' : 'Save';
       showErr(error && error.message ? error.message : 'Couldn’t save. Check your connection and try again.');
     }
   });
@@ -1416,7 +1449,7 @@ async function deleteWorkout(btn) {
   if (!btn.classList.contains('armed')) {
     btn.classList.add('armed');
     btn.lastChild.textContent = 'Tap again to delete';
-    setTimeout(() => { if (btn.isConnected && !btn.disabled) { btn.classList.remove('armed'); btn.lastChild.textContent = 'Delete this workout'; } }, 4000);
+    setTimeout(() => { if (btn.isConnected && !btn.disabled) { btn.classList.remove('armed'); btn.lastChild.textContent = 'Delete'; } }, 4000);
     return;
   }
   btn.disabled = true;
@@ -2629,6 +2662,10 @@ function bindEvents() {
     const modeBtn = e.target.closest('[data-set-mode]');
     if (modeBtn) { setMode(modeBtn.dataset.setMode); return; }
     if (e.target.closest('[data-log-open]')) { openLogSheet(); return; }
+    if (e.target.closest('[data-edit-workout]') && state.route.page === 'workout') {
+      openLogSheet({ w: day().strain.workouts[state.route.index], iso: day().date });
+      return;
+    }
     const del = e.target.closest('[data-delete-workout]');
     if (del) { deleteWorkout(del); return; }
     const rep = e.target.closest('a[data-replace]');
