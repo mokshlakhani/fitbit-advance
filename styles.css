@@ -98,7 +98,7 @@
   --glass-blur: saturate(160%) blur(24px);
 
   /* Height of the Today greeting row in the top bar (scrolls away; the date row stays) */
-  --greet-h: 48px;
+  --greet-h: 54px;
 }
 
 /* ---------- Base ---------- */
@@ -231,12 +231,12 @@ p, .note { text-wrap: pretty; }
 /* Greeting (Today only): "Hello," then the name. */
 .greet {
   display: none; height: var(--greet-h); line-height: var(--greet-h); min-width: 0;
-  font-size: 1.75rem; letter-spacing: -0.025em;
+  font-size: 2.125rem; letter-spacing: -0.03em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: opacity var(--t) var(--ease);
 }
-.greet-hello { font-weight: 400; color: var(--text-secondary); }
-.greet-name { font-weight: 600; color: var(--text-primary); }
+.greet-hello { font-weight: 500; color: var(--text-secondary); }
+.greet-name { font-weight: 700; color: var(--text-primary); }
 
 /* On Today the bar has two rows: the greeting, then the usual bar (feedback or
    brand, date, sync or avatar). The bar sticks by that second row, so the
@@ -1031,7 +1031,7 @@ a.workout:active { background: var(--highlight); }
   z-index: 1;
   max-width: var(--max);
   margin: 0 auto;
-  padding: 8px var(--gutter) calc(var(--tabbar-h) + 96px + env(safe-area-inset-bottom));
+  padding: 8px var(--gutter) calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom));
   color: var(--text-tertiary);
   font-size: 0.75rem;
   text-align: center;
@@ -1134,25 +1134,31 @@ a.card, .wday, .chip, .tab, .back, .icon-btn, .date-btn, .segmented a, .stat, .m
 .tab-ind.slide { transition: transform 420ms var(--settle), opacity var(--t-fast) var(--ease); }
 @media (prefers-reduced-motion: reduce) { .tab-ind.slide { transition: none; } }
 
+/* ---------- Today's top row: mode switch and Log + ---------- */
+/* Thin controls (32px to the eye) that keep a 44px tap area. */
+.home-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -8px 0 -6px; min-height: 44px; }
+.home-top .mode-switch {
+  width: auto; margin: 0; padding: 0;
+  background: none; border: 0;
+}
+.home-top .mode-switch button { min-height: 32px; padding: 0 14px; font-size: 0.8125rem; }
+.home-top .mode-switch .thumb { top: 0; bottom: 0; left: 0; width: 50%; background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--border); }
+.home-top .mode-switch button::after, .log-btn::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+
 /* ---------- Log + : log an activity to Google Health ---------- */
 /* Primary button: light pill with dark text. */
-.log-fab {
-  position: fixed;
-  z-index: 29;
-  right: 16px;
-  bottom: calc(var(--tabbar-h) + 22px + env(safe-area-inset-bottom));
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 48px; padding: 0 18px 0 20px;
+.log-btn {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 32px; padding: 0 12px 0 14px;
   border-radius: var(--pill);
   background: var(--text-primary); color: var(--bg);
-  font: 600 0.9375rem/1 var(--font);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+  font: 600 0.8125rem/1 var(--font);
   transition: transform var(--t) var(--ease-out), opacity var(--t-fast) var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
-.log-fab .ph { width: 18px; height: 18px; }
-.log-fab:active { transform: scale(0.95); }
-body.log-open .log-fab { opacity: 0; pointer-events: none; }
+.log-btn .ph { width: 14px; height: 14px; }
+.log-btn:active { transform: scale(0.95); }
 
 /* Sheets: raised surface, 24px top radius, grabber. */
 .log-sheet { position: fixed; inset: 0; z-index: 60; }
@@ -1309,23 +1315,22 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-left; }
   :root { --gutter: 14px; }
   .card-value { font-size: 2rem; }
   .ring-value { font-size: 1.5rem; }
-  .greet { font-size: 1.5rem; }
+  .greet { font-size: 1.9375rem; }
 }
 
 /* ---------- Wider screens (desktop dashboard) ---------- */
 @media (min-width: 721px) {
-  :root { --gutter: 24px; --greet-h: 56px; }
+  :root { --gutter: 24px; --greet-h: 64px; }
   .page { gap: var(--s8); padding-bottom: 56px; }
   .foot { padding: 4px var(--gutter) 40px; }
   .tabbar { display: none; }
-  .log-fab { bottom: 28px; right: 28px; }
 
   .bar-inner { padding: 12px var(--gutter); --side: 160px; }
   body.is-home .greet { padding-left: 0; }
   .brand span { display: inline; }
   .avatar { display: grid; }
   .avatar[hidden] { display: grid; visibility: hidden; }
-  .greet { font-size: 2rem; }
+  .greet { font-size: 2.5rem; }
   .date-btn { font-size: 0.9375rem; min-width: 150px; }
 
   .week { --gap: 6px; }

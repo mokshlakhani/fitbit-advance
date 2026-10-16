@@ -1221,7 +1221,7 @@ const HOME_SECTIONS = {
 
 // Standard / Performance switch at the top of Today.
 function modeSwitch() {
-  return `<div class="mode-switch reveal" role="group" aria-label="View mode" data-mode="${state.mode}">
+  return `<div class="mode-switch" role="group" aria-label="View mode" data-mode="${state.mode}">
     <span class="thumb" aria-hidden="true"></span>
     <button type="button" data-set-mode="std" aria-pressed="${!perf()}">Standard</button>
     <button type="button" data-set-mode="perf" aria-pressed="${perf()}">Performance</button>
@@ -1288,16 +1288,18 @@ function renderHome() {
       <div class="grid">${sec.keys.map((k, i) => metricCard(k, { wide: k === 'sleep', glow: k === 'sleep' || (sec.title === 'Key metrics' && i === 0) })).join('')}${sec.workouts ? workoutsCard() : ''}</div>
     </section>`).join('');
 
+  // One thin row under the date: the mode switch and Log +, so nothing floats
+  // over the page.
+  const topRow = `<div class="home-top reveal">${modeSwitch()}${canLog() ? `<button type="button" class="log-btn" data-log-open aria-label="Log an activity">Log ${ph('plus', '', 'bold')}</button>` : ''}</div>`;
   return `
+    ${topRow}
     ${state.portrait && !state.demo ? portraitHero(d) : ''}
     ${weekStrip()}
-    ${modeSwitch()}
     ${dials(d)}
     ${insightCard(d)}
     ${myDayPanel(d)}
     ${sections}
     ${perf() ? `<section class="section"><div class="section-head"><h2>Trends</h2></div>${trendsPanel()}</section>` : ''}
-    ${canLog() ? `<button type="button" class="log-fab" data-log-open aria-label="Log an activity">Log ${ph('plus', '', 'bold')}</button>` : ''}
   `;
 }
 
