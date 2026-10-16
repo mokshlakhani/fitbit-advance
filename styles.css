@@ -951,7 +951,7 @@ a.workout:active { background: var(--highlight); }
   z-index: 1;
   max-width: var(--max);
   margin: 0 auto;
-  padding: 8px var(--gutter) calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom));
+  padding: 8px var(--gutter) calc(var(--tabbar-h) + 96px + env(safe-area-inset-bottom));
   color: var(--text-tertiary);
   font-size: 0.75rem;
   text-align: center;
@@ -1054,31 +1054,33 @@ a.card, .wday, .chip, .tab, .back, .icon-btn, .date-btn, .segmented a, .stat, .m
 .tab-ind.slide { transition: transform 420ms var(--settle), opacity var(--t-fast) var(--ease); }
 @media (prefers-reduced-motion: reduce) { .tab-ind.slide { transition: none; } }
 
-/* ---------- Today's top row: mode switch and Log + ---------- */
-/* Thin controls (32px to the eye) that keep a 44px tap area. */
-.home-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -8px 0 -6px; min-height: 44px; }
-.home-top .mode-switch {
-  width: auto; margin: 0; padding: 0;
-  background: none; border: 0;
-}
-.home-top .mode-switch button { min-height: 32px; padding: 0 14px; font-size: 0.8125rem; }
-.home-top .mode-switch .thumb { top: 0; bottom: 0; left: 0; width: 50%; background: var(--surface-raised); box-shadow: inset 0 0 0 1px var(--border); }
-.home-top .mode-switch button::after, .log-btn::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+/* ---------- Today's mode switch: centred, in a thin pill ---------- */
+/* About 36px tall to the eye; each option keeps a 44px tap area. */
+.home-top { display: flex; justify-content: center; margin: -8px 0 -6px; }
+.home-top .mode-switch { width: auto; margin: 0; padding: 3px; }
+.home-top .mode-switch button { min-height: 28px; padding: 0 16px; font-size: 0.8125rem; }
+.home-top .mode-switch .thumb { top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); }
+.home-top .mode-switch button::after { content: ''; position: absolute; left: 0; right: 0; top: -8px; bottom: -8px; }
 
 /* ---------- Log + : log an activity to Google Health ---------- */
 /* Primary button: light pill with dark text. */
-.log-btn {
-  position: relative;
-  display: inline-flex; align-items: center; gap: 5px;
-  height: 32px; padding: 0 12px 0 14px;
+.log-fab {
+  position: fixed;
+  z-index: 29;
+  right: 16px;
+  bottom: calc(var(--tabbar-h) + 22px + env(safe-area-inset-bottom));
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 48px; padding: 0 18px 0 20px;
   border-radius: var(--pill);
   background: var(--text-primary); color: var(--bg);
-  font: 600 0.8125rem/1 var(--font);
+  font: 600 0.9375rem/1 var(--font);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
   transition: transform var(--t) var(--ease-out), opacity var(--t-fast) var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
-.log-btn .ph { width: 14px; height: 14px; }
-.log-btn:active { transform: scale(0.95); }
+.log-fab .ph { width: 18px; height: 18px; }
+.log-fab:active { transform: scale(0.95); }
+body.log-open .log-fab { opacity: 0; pointer-events: none; }
 
 /* Sheets: raised surface, 24px top radius, grabber. */
 .log-sheet { position: fixed; inset: 0; z-index: 60; }
@@ -1244,6 +1246,7 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-left; }
   .page { gap: var(--s8); padding-bottom: 56px; }
   .foot { padding: 4px var(--gutter) 40px; }
   .tabbar { display: none; }
+  .log-fab { bottom: 28px; right: 28px; }
 
   .bar-inner { padding: 12px var(--gutter); --side: 160px; }
   body.is-home .greet { padding-left: 0; }
