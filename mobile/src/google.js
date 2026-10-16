@@ -248,9 +248,10 @@ const SLOW_EVERY_MS = 15 * 60 * 1000;
  *  - 'recent': daily summaries for the last `days` days, plus anything new for
  *    the last few days of heart rate, steps and calories. Everything runs in
  *    parallel; this is what the person waits for.
- *  - 'history': the profile (at most daily) and older high-frequency days that
- *    are missing within `historyDays` (heart rate capped by backfillLimit per
- *    sync, newest first). Runs after the dashboard has updated.
+ *  - 'history': workouts (at most every 15 minutes; the slowest download), the
+ *    profile (at most daily) and older high-frequency days that are missing
+ *    within `historyDays` (heart rate capped by backfillLimit per sync, newest
+ *    first). Runs after the dashboard has updated.
  * Returns {errors, fetched, pending}.
  */
 export async function sync({ getToken, phase = 'recent', days = 7, historyDays = days, backfillLimit = {}, onProgress = () => {} }) {
@@ -283,43 +284,57 @@ export async function sync({ getToken, phase = 'recent', days = 7, historyDays =
     tasks.push(guard(async () => { await syncProfile(api); await store.set('profileSyncedAt', Date.now()); return 0; }));
   }
 
+  // One summary type's recent window (all of history until it has downloaded once).
+  const summaryTask = async type => {
+    const [field, kind] = SUMMARY_TYPES[type];
+    // Until a type's whole history window has downloaded once (it can fail
+    // on the first sync), keep asking for all of it, not just recent days.
+    const covered = await store.get(`covered:${type}`);
+    const start = addDays(end, -((covered ? days : Math.max(days, historyDays)) + 1));
+    return guard(async () => {
+      const filter = type === 'sleep'
+        ? `${field} >= "${bound(start, kind)}"` // sleep only supports >= on end_time
+        : `${field} >= "${bound(start, kind)}" AND ${field} < "${bound(end, kind)}"`;
+      // The source filter leaves out workouts logged from apps, DataStrap's own
+      // included, so those come from a second, unfiltered request, sent at the
+      // same time (each takes seconds; one after the other they took ~10 s).
+      const [points, all] = await Promise.all([
+        api.list(type, filter),
+        type === 'exercise' ? api.list(type, filter, { sources: false }) : null,
+      ]);
+      const merged = (await store.get(`points:${type}`)) || {};
+      let changed = 0;
+      if (type === 'exercise') {
+        // Drop DataStrap workouts deleted since.
+        const own = all.filter(isDatastrap);
+        const keep = new Set(own.map(pointKey));
+        const lo = bound(start, kind), hi = bound(end, kind);
+        for (const [k, p] of Object.entries(merged)) {
+          const civil = civilStart(p);
+          if (isDatastrap(p) && civil && civil >= lo && civil < hi && !keep.has(k)) { delete merged[k]; changed++; }
+        }
+        points.push(...own);
+      }
+      for (const p of points) {
+        const k = pointKey(p);
+        if (JSON.stringify(merged[k]) !== JSON.stringify(p)) changed++;
+        merged[k] = p;
+      }
+      if (changed) await store.set(`points:${type}`, merged);
+      if (!covered) await store.set(`covered:${type}`, true);
+      return changed;
+    });
+  };
+
+  // Workouts are the slowest summary to fetch (~6 s), so they come in the
+  // quiet follow-up phase: the dashboard updates without waiting for them and
+  // again once they arrive. Same 15-minute rhythm as the other summaries.
   const slowDue = Date.now() - ((await store.get('slowSyncAt')) || 0) > SLOW_EVERY_MS;
+  const exerciseDue = Date.now() - ((await store.get('exerciseSyncAt')) || 0) > SLOW_EVERY_MS;
   if (phase === 'recent' && slowDue) {
-    for (const [type, [field, kind]] of Object.entries(SUMMARY_TYPES)) {
-      // Until a type's whole history window has downloaded once (it can fail
-      // on the first sync), keep asking for all of it, not just recent days.
-      const covered = await store.get(`covered:${type}`);
-      const start = addDays(end, -((covered ? days : Math.max(days, historyDays)) + 1));
-      tasks.push(guard(async () => {
-        const filter = type === 'sleep'
-          ? `${field} >= "${bound(start, kind)}"` // sleep only supports >= on end_time
-          : `${field} >= "${bound(start, kind)}" AND ${field} < "${bound(end, kind)}"`;
-        const points = await api.list(type, filter);
-        const merged = (await store.get(`points:${type}`)) || {};
-        let changed = 0;
-        if (type === 'exercise') {
-          // The source filter leaves out workouts logged from apps, DataStrap's
-          // own included: fetch those separately, and drop ones deleted since.
-          const own = (await api.list(type, filter, { sources: false })).filter(isDatastrap);
-          const keep = new Set(own.map(pointKey));
-          const lo = bound(start, kind), hi = bound(end, kind);
-          for (const [k, p] of Object.entries(merged)) {
-            const civil = civilStart(p);
-            if (isDatastrap(p) && civil && civil >= lo && civil < hi && !keep.has(k)) { delete merged[k]; changed++; }
-          }
-          points.push(...own);
-        }
-        for (const p of points) {
-          const k = pointKey(p);
-          if (JSON.stringify(merged[k]) !== JSON.stringify(p)) changed++;
-          merged[k] = p;
-        }
-        if (changed) await store.set(`points:${type}`, merged);
-        if (!covered) await store.set(`covered:${type}`, true);
-        return changed;
-      }));
-    }
+    for (const type of SUMMARY_TYPE_NAMES) if (type !== 'exercise') tasks.push(await summaryTask(type));
   }
+  if (phase === 'history' && exerciseDue) tasks.push(await summaryTask('exercise'));
   if (phase === 'recent') {
     const from = slowDue ? fresh : utcToday;
     for (const [, , fn] of DAILY) {
@@ -342,6 +357,8 @@ export async function sync({ getToken, phase = 'recent', days = 7, historyDays =
   if (phase === 'recent') {
     await store.set('lastSync', Date.now());
     if (slowDue && !report.errors.length) await store.set('slowSyncAt', Date.now());
+  } else if (exerciseDue && !report.errors.length) {
+    await store.set('exerciseSyncAt', Date.now());
   }
   return report;
 }
