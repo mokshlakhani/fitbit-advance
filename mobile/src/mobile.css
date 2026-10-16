@@ -33,8 +33,6 @@ body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none;
 
 .m-actions { justify-self: end; display: flex; align-items: center; gap: 4px; }
 .m-lead { justify-self: start; display: flex; align-items: center; }
-/* On Today the feedback button sits beside sync, top right. */
-body.is-home .bar-inner > .m-lead { justify-self: end; }
 
 /* Sheets: raised surface, 24px top radius, grabber. */
 .m-sheet { position: fixed; inset: 0; z-index: 50; }

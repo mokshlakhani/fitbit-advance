@@ -98,7 +98,7 @@
   --glass-blur: saturate(160%) blur(24px);
 
   /* Height of the Today greeting row in the top bar (scrolls away; the date row stays) */
-  --greet-h: 66px;
+  --greet-h: 48px;
 }
 
 /* ---------- Base ---------- */
@@ -226,22 +226,25 @@ p, .note { text-wrap: pretty; }
 .brand svg { width: 22px; height: 22px; fill: none; stroke: var(--mood); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: stroke 500ms var(--ease); }
 
 /* Greeting (Today only): "Hello," then the name. */
-.greet { display: none; flex-direction: column; justify-content: center; height: var(--greet-h); min-width: 0; transition: opacity var(--t) var(--ease); }
-.greet-hello { font-size: 1.25rem; font-weight: 400; color: var(--text-secondary); line-height: 1.25; }
-.greet-name { font-size: 2rem; font-weight: 600; letter-spacing: -0.025em; line-height: 1.12; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.greet {
+  display: none; height: var(--greet-h); line-height: var(--greet-h); min-width: 0;
+  font-size: 1.75rem; letter-spacing: -0.025em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: opacity var(--t) var(--ease);
+}
+.greet-hello { font-weight: 400; color: var(--text-secondary); }
+.greet-name { font-weight: 600; color: var(--text-primary); }
 
-/* On Today the bar has two rows: greeting with the buttons, then the date.
-   The bar sticks by its date row, so the greeting scrolls away and fades. */
+/* On Today the bar has two rows: the greeting, then the usual bar (feedback or
+   brand, date, sync or avatar). The bar sticks by that second row, so the
+   greeting scrolls away and fades while the buttons and date stay. */
 body.is-home .bar { top: calc(-1 * (var(--greet-h) + 4px)); }
 body.is-home .bar-inner {
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas: "greet lead act" "date date date";
+  grid-template-areas: "greet greet greet" "lead date act";
   row-gap: 4px;
 }
-body.is-home .greet { display: flex; }
+body.is-home .greet { display: block; }
 body.is-home .bar.scrolled .greet { opacity: 0; }
-body.is-home .date-nav { justify-self: start; }
-body.is-home .bar-inner > .brand, body.is-home .bar-inner > .m-lead, body.is-home .bar-inner > .m-actions { align-self: start; margin-top: 11px; }
 
 .date-nav {
   display: flex;
@@ -1216,12 +1219,12 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-left; }
   :root { --gutter: 14px; }
   .card-value { font-size: 2rem; }
   .ring-value { font-size: 1.5rem; }
-  .greet-name { font-size: 1.75rem; }
+  .greet { font-size: 1.5rem; }
 }
 
 /* ---------- Wider screens (desktop dashboard) ---------- */
 @media (min-width: 721px) {
-  :root { --gutter: 24px; --greet-h: 74px; }
+  :root { --gutter: 24px; --greet-h: 56px; }
   .page { gap: var(--s8); padding-bottom: 56px; }
   .foot { padding: 4px var(--gutter) 40px; }
   .tabbar { display: none; }
@@ -1231,8 +1234,7 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-left; }
   .brand span { display: inline; }
   .avatar { display: grid; }
   .avatar[hidden] { display: grid; visibility: hidden; }
-  .greet-hello { font-size: 1.375rem; }
-  .greet-name { font-size: 2.125rem; }
+  .greet { font-size: 2rem; }
   .date-btn { font-size: 0.9375rem; min-width: 150px; }
 
   .week { --gap: 6px; }
