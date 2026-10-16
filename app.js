@@ -1230,48 +1230,50 @@ function modeSwitch() {
 
 // ---------- Portrait hero (Today) ----------
 // A personal portrait (portrait.webp, git-ignored, never in the repo or the
-// public web app) with three of the night's vitals pinned to it. Shown only
-// when that file exists and the data isn't the sample person's.
+// public web app) with the night's vitals pinned to the body. Shown only when
+// that file exists and the data isn't the sample person's.
+// x / y: the point on the portrait, in % of the image. card: which corner the
+// glass card sits in and its top (% of the box); end: where the leader meets it.
 const HERO_SPOTS = {
-  // Marker positions as % of the portrait (x across, y down) and where each label sits.
-  head: { x: 26, y: 27, side: 'tl' },
-  throat: { x: 66.7, y: 52.3, side: 'r' },
-  shoulder: { x: 34.7, y: 71.6, side: 'bl' },
+  brain: { x: 51.1, y: 17.3, card: 'tl', top: 1, end: [31, 12] },
+  throat: { x: 66.7, y: 52.3, card: 'tr', top: 49, end: [69, 56] },
+  chest: { x: 71, y: 82.8, card: 'tr', top: 75, end: [69, 82] },
+  shoulder: { x: 34.7, y: 71.6, card: 'tl', top: 80, end: [17, 80] },
 };
+// Stress and skin temperature are Performance-only: Standard shows HRV at the
+// brain (the nervous system's recovery signal) and leaves the shoulder out.
 const HERO_VITALS = {
-  perf: [['head', 'rhr', 'Heart'], ['throat', 'resp', 'Breathing'], ['shoulder', 'temp', 'Skin temp']],
-  std: [['head', 'rhr', 'Heart'], ['throat', 'spo2', 'Blood oxygen'], ['shoulder', 'hrv', 'HRV']],
+  perf: [['brain', 'stress', 'Stress'], ['throat', 'spo2', 'SpO₂'], ['chest', 'rhr', 'Heart'], ['shoulder', 'temp', 'Skin temp']],
+  std: [['brain', 'hrv', 'HRV'], ['throat', 'spo2', 'SpO₂'], ['chest', 'rhr', 'Heart']],
 };
-// The portrait box: the image takes 69% of the width from 8.4% in, full height.
+// The portrait takes 69% of the box's width from 8.4% in, at full height.
 const HERO_IMG = { left: 8.4, width: 69 };
 
 function heroStatus(key, v) {
-  if (!isNum(v)) return 'No data';
+  if (!isNum(v)) return { text: 'No data', cls: '' };
   const r = normalRange(key, state.idx);
-  if (!r) return '';
-  return v > r.hi ? 'Above usual' : v < r.lo ? 'Below usual' : 'Normal';
+  if (!r) return { text: '', cls: '' };
+  return v > r.hi ? { text: 'Above usual', cls: 'off' } : v < r.lo ? { text: 'Below usual', cls: 'off' } : { text: 'Normal', cls: 'ok' };
 }
 
 function portraitHero(d) {
-  const spots = HERO_VITALS[state.mode].map(([spot, key, label]) => {
+  const spots = HERO_VITALS[state.mode].map(([spot, key, label], i) => {
     const p = HERO_SPOTS[spot];
-    const v = M[key].pick(d);
-    return { ...p, key, label, v, x: HERO_IMG.left + HERO_IMG.width * p.x / 100 };
+    return { ...p, key, label, i, v: M[key].pick(d), px: HERO_IMG.left + HERO_IMG.width * p.x / 100 };
   });
-  const lines = spots.map(s => {
-    // From the label's edge to the marker.
-    const [lx, ly] = s.side === 'tl' ? [17, 17] : s.side === 'r' ? [75, s.y + 7] : [17, 79];
-    return `<line x1="${lx}" y1="${ly}" x2="${s.x}" y2="${s.y}" vector-effect="non-scaling-stroke"/>`;
-  }).join('');
+  const lines = spots.map(s => `<path d="M${s.px},${s.y}L${s.end[0]},${s.end[1]}" pathLength="1" style="--i:${s.i}" vector-effect="non-scaling-stroke"/>`).join('');
   return `<section class="hero reveal" aria-label="Last night's vitals">
     <img class="hero-img" src="portrait.webp" alt="" style="left:${HERO_IMG.left}%;width:${HERO_IMG.width}%">
     <svg class="hero-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>
-    ${spots.map((s, i) => `<span class="hero-dot" style="left:${s.x}%;top:${s.y}%;--i:${i}" aria-hidden="true"></span>
-      <a class="hero-tag ${s.side}" href="${hrefMetric(s.key, M[s.key].defaultRange, d.date)}" style="${s.side === 'r' ? `top:${s.y + 7}%` : ''}">
-        <span class="hero-label">${esc(s.label)}</span>
+    ${spots.map(s => {
+      const st = heroStatus(s.key, s.v);
+      return `<span class="hero-pin" style="left:${s.px}%;top:${s.y}%;--c:${accent(s.key)};--i:${s.i}" aria-hidden="true"></span>
+      <a class="hero-card ${s.card}" href="${hrefMetric(s.key, M[s.key].defaultRange, d.date)}" style="top:${s.top}%;--c:${accent(s.key)};--i:${s.i}">
+        <span class="hero-head">${ph(ICON[s.key], 'hero-icon')}${esc(s.label)}</span>
         <span class="hero-value">${isNum(s.v) ? valueHtml(s.key, s.v, 'hero-' + s.key) : '—'}</span>
-        <span class="hero-status">${esc(heroStatus(s.key, s.v))}</span>
-      </a>`).join('')}
+        ${st.text ? `<span class="hero-status ${st.cls}">${esc(st.text)}</span>` : ''}
+      </a>`;
+    }).join('')}
   </section>`;
 }
 
