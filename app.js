@@ -1233,11 +1233,11 @@ function modeSwitch() {
 // public web app) with the night's vitals pinned to the body. Shown only when
 // that file exists and the data isn't the sample person's.
 // x / y: the point on the portrait, in % of the image. card: which corner the
-// glass card sits in and its top (% of the box); end: where the leader meets it.
+// vital's text sits in and its top (% of the box); end: where the leader meets it.
 const HERO_SPOTS = {
-  brain: { x: 51.1, y: 17.3, card: 'tl', top: 1, end: [31, 12] },
-  throat: { x: 66.7, y: 52.3, card: 'tr', top: 49, end: [69, 56] },
-  chest: { x: 71, y: 82.8, card: 'tr', top: 75, end: [69, 82] },
+  brain: { x: 51.1, y: 17.3, card: 'tl', top: 1, end: [25, 15.5] },
+  throat: { x: 66.7, y: 52.3, card: 'tr', top: 49, end: [70, 55] },
+  chest: { x: 71, y: 82.8, card: 'tr', top: 75, end: [70, 81] },
   shoulder: { x: 34.7, y: 71.6, card: 'tl', top: 80, end: [17, 80] },
 };
 // Stress and skin temperature are Performance-only: Standard shows HRV at the
