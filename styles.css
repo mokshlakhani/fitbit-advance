@@ -188,22 +188,25 @@ p, .note { text-wrap: pretty; }
   background: var(--glass-bar);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  border-bottom: 1px solid transparent;
-  transition: border-color var(--t-fast) var(--ease);
   padding-top: env(safe-area-inset-top);
+  /* No hard edge: the bar (and its blur) fades out over its last 16px, which
+     overlap the page, so content slides under it seamlessly. */
+  padding-bottom: 16px;
+  margin-bottom: -16px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
 }
-.bar.scrolled { border-bottom-color: var(--border); }
 
 .bar-inner {
   --side: 44px;
   max-width: var(--max);
   margin: 0 auto;
-  padding: 8px var(--gutter);
+  padding: 8px 10px;
   display: grid;
   grid-template-columns: minmax(var(--side), 1fr) minmax(0, auto) minmax(var(--side), 1fr);
   grid-template-areas: "lead date act";
   align-items: center;
-  column-gap: 8px;
+  column-gap: 2px;
 }
 .bar-inner > .brand, .bar-inner > .m-lead { grid-area: lead; }
 .bar-inner > .greet { grid-area: greet; }
@@ -243,13 +246,13 @@ body.is-home .bar-inner {
   grid-template-areas: "greet greet greet" "lead date act";
   row-gap: 4px;
 }
-body.is-home .greet { display: block; }
+body.is-home .greet { display: block; padding-left: calc(var(--gutter) - 10px); }
 body.is-home .bar.scrolled .greet { opacity: 0; }
 
 .date-nav {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   justify-self: center;
   min-width: 0;
   max-width: 100%;
@@ -1238,6 +1241,7 @@ html[data-nav="back"]::view-transition-new(root) { animation-name: vt-in-left; }
   .log-fab { bottom: 28px; right: 28px; }
 
   .bar-inner { padding: 12px var(--gutter); --side: 160px; }
+  body.is-home .greet { padding-left: 0; }
   .brand span { display: inline; }
   .avatar { display: grid; }
   .avatar[hidden] { display: grid; visibility: hidden; }
