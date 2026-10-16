@@ -423,7 +423,7 @@ a.icon-btn[aria-disabled="true"] { pointer-events: none; }
   padding: 4px; border-radius: var(--pill); background: var(--surface); border: 1px solid var(--border);
 }
 .mode-switch button {
-  position: relative; z-index: 1; border: 0; background: none; cursor: pointer; min-height: 36px; border-radius: var(--pill);
+  position: relative; z-index: 1; border: 0; background: none; cursor: pointer; min-height: 44px; border-radius: var(--pill);
   font: 500 0.875rem var(--font); color: var(--text-secondary);
   transition: color var(--t) var(--ease); -webkit-tap-highlight-color: transparent;
 }
@@ -520,8 +520,8 @@ a.icon-btn[aria-disabled="true"] { pointer-events: none; }
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 14px;
   border-radius: var(--pill);
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -879,7 +879,7 @@ a.workout:active { background: var(--highlight); }
   position: relative;
   z-index: 1;
   display: grid; place-items: center;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 4px;
   font-size: 0.875rem;
   font-weight: 500;
@@ -912,7 +912,7 @@ a.workout:active { background: var(--highlight); }
 .stat-label { font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary); }
 .stat-value { font-size: 1.25rem; font-weight: 500; letter-spacing: -0.01em; margin-top: 4px; overflow-wrap: anywhere; }
 .stat-value .u { font-size: 0.8125rem; font-weight: 400; color: var(--text-secondary); margin-left: 3px; }
-.stat-sub { font-size: 0.75rem; color: var(--text-tertiary); margin-top: 2px; }
+.stat-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
 
 .rows { display: flex; flex-direction: column; }
 .row { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 10px 0; border-top: 1px solid var(--border); }
@@ -1123,7 +1123,7 @@ body.log-open .log-fab { opacity: 0; pointer-events: none; }
 .log-chip:active { transform: scale(0.96); }
 .log-chip.on { background: var(--text-primary); border-color: var(--text-primary); color: var(--bg); }
 .log-chip.on .ph { color: var(--bg); }
-.log-chip.small { min-height: 40px; padding: 0 14px; font-size: 0.8125rem; }
+.log-chip.small { min-height: 44px; padding: 0 14px; font-size: 0.8125rem; }
 .log-empty { margin: 0; color: var(--text-secondary); font-size: 0.875rem; }
 .log-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
