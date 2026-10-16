@@ -57,8 +57,8 @@ if (WEB) {
     start_url: './',
     scope: './',
     display: 'standalone',
-    background_color: '#050506',
-    theme_color: '#050506',
+    background_color: '#0A0A0B',
+    theme_color: '#0A0A0B',
     icons: [
       { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
       { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -67,8 +67,8 @@ if (WEB) {
   }, null, 2));
 
   html = html
-    .replace('<meta name="theme-color" content="#050506">', [
-      '<meta name="theme-color" content="#050506">',
+    .replace('<meta name="theme-color" content="#0A0A0B">', [
+      '<meta name="theme-color" content="#0A0A0B">',
       '<meta name="google-site-verification" content="G4N7W8UV2TrkiwGzqEbMfv3hft80QxgpQGKX02Dfopw" />',
       '<meta name="apple-mobile-web-app-capable" content="yes">',
       '<meta name="mobile-web-app-capable" content="yes">',

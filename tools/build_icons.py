@@ -25,6 +25,8 @@ NAMES = {
     'boxing': 'boxing-glove', 'tennis': 'tennis-ball', 'basketball': 'basketball', 'snow': 'snowflake',
     'dance': 'music-notes', 'chores': 'broom', 'boat': 'boat', 'ski': 'person-simple-ski',
     'feedback': 'chat-circle-text', 'pencil-simple': 'pencil-simple',
+    # Cards that open a page
+    'arrow-up-right': 'arrow-up-right',
 }
 WEIGHTS = {'regular': '', 'duotone': '-duotone', 'fill': '-fill', 'bold': '-bold'}
 

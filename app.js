@@ -111,7 +111,7 @@ const ICON = {
   chev: 'chevron-right', back: 'chevron-left',
 };
 // Metric icons use Phosphor's two-tone weight; arrows and controls the regular one.
-const icon = (name, cls = '', weight) => ph(ICON[name] || name, cls, weight || (name === 'chev' || name === 'back' ? 'regular' : 'duotone'));
+const icon = (name, cls = '', weight) => ph(ICON[name] || name, cls, weight || 'regular');
 
 // Metric icons with a small idle animation (heart beats, lungs breathe…). The
 // heart beats at the day's resting rate and the wind icon at the breathing rate.
@@ -174,7 +174,7 @@ const M = {
     note: 'How far your resting heart rate was above, and your HRV below, your own last 14 nights. 50 is a typical night for you; higher means your body was under more strain. It needs 14 nights of both.' },
   temp: { label: 'Skin temperature', cardLabel: 'Skin temp', group: 'body', unit: '°C', dp: 1, kind: 'line', agg: 'avg', defaultRange: 'month', pick: d => tempIn(d.cardiovascular.temp),
     note: 'Nightly skin temperature measured at the wrist.' },
-  spo2: { label: 'Blood oxygen', group: 'body', unit: '%', dp: 1, kind: 'line', agg: 'avg', better: 'higher', defaultRange: 'month', pick: d => d.cardiovascular.spo2 },
+  spo2: { label: 'Blood oxygen', group: 'body', color: 'var(--oxygen)', unit: '%', dp: 1, kind: 'line', agg: 'avg', better: 'higher', defaultRange: 'month', pick: d => d.cardiovascular.spo2 },
   resp: { label: 'Breathing rate', group: 'body', unit: 'br/min', dp: 1, kind: 'line', agg: 'avg', defaultRange: 'month', pick: d => d.cardiovascular.respiration_rate },
   bioAge: { label: 'Body age', group: 'body', unit: 'yrs', dp: 1, kind: 'line', agg: 'avg', better: 'lower', intraday: 'bioage', defaultRange: 'day',
     pick: d => (d.bio_age && d.bio_age.status === 'ok' ? d.bio_age.value : null), note: BIO_NOTE },
@@ -185,7 +185,7 @@ const M = {
 
 const DRIVER_KEY = { 'HRV (RMSSD)': 'hrv', 'Resting Heart Rate': 'rhr', 'Respiratory Rate': 'resp', 'Skin Temperature': 'temp' };
 
-const accent = key => GROUPS[M[key].group].color;
+const accent = key => M[key].color || GROUPS[M[key].group].color;
 
 function unitText(unit) {
   if (!unit || unit === 'dur') return '';
@@ -245,7 +245,7 @@ function deltaInfo(key, idx, compact = false) {
 function deltaHtml(key, idx, compact = false) {
   const d = deltaInfo(key, idx, compact);
   const arrow = d.dir ? `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="${d.dir > 0 ? 'M6 2l4 5H2z' : 'M6 10 2 5h8z'}"/></svg>` : '';
-  return `<div class="delta ${d.cls}">${arrow}${esc(d.text)}</div>`;
+  return `<div class="delta ${d.cls}">${d.text ? `<span>${arrow}${esc(d.text)}</span>` : ''}</div>`;
 }
 
 // ---------- Chart primitives ----------
@@ -378,11 +378,11 @@ function sparkChart(w, key, vals, selPos) {
   if (m.kind === 'bar') {
     const max = Math.max(...present, m.goal || 0, 1);
     const step = w / vals.length;
-    const bw = Math.min(16, step * 0.56);
+    const bw = 4;
     return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" aria-hidden="true">${vals.map((v, i) => {
       if (!isNum(v)) return '';
       const h = Math.max(3, (H - 2) * v / max);
-      return `<rect class="bar-mark" x="${step * (i + 0.5) - bw / 2}" y="${H - h}" width="${bw}" height="${h}" rx="${Math.min(bw / 2, 4)}" style="fill:${color};opacity:${i === selPos ? 1 : 0.4};animation-delay:${i * 30}ms"/>`;
+      return `<rect class="bar-mark" x="${step * (i + 0.5) - bw / 2}" y="${H - h}" width="${bw}" height="${h}" rx="${bw / 2}" style="fill:${i === selPos ? 'var(--text-primary)' : 'rgba(255, 255, 255, 0.22)'};animation-delay:${i * 30}ms"/>`;
     }).join('')}</svg>`;
   }
   const lo = Math.min(...present), hi = Math.max(...present);
@@ -394,9 +394,9 @@ function sparkChart(w, key, vals, selPos) {
   let cur = [];
   vals.forEach((v, i) => { if (isNum(v)) cur.push(`${xs[i].toFixed(1)},${y(v).toFixed(1)}`); else if (cur.length) { segs.push(cur); cur = []; } });
   if (cur.length) segs.push(cur);
-  const last = selPos != null && isNum(vals[selPos]) ? `<circle class="dot" cx="${xs[selPos]}" cy="${y(vals[selPos])}" r="4" style="fill:${color};stroke:var(--surface);stroke-width:2"/>` : '';
+  const last = selPos != null && isNum(vals[selPos]) ? `<circle class="dot" cx="${xs[selPos]}" cy="${y(vals[selPos])}" r="3.5" style="fill:${color};stroke:var(--surface);stroke-width:2"/>` : '';
   return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" aria-hidden="true">
-    <path class="draw" d="${segs.map(s => 'M' + s.join('L')).join('')}" pathLength="1" style="fill:none;stroke:${color};stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:.9"/>${last}</svg>`;
+    <path class="draw" d="${segs.map(s => 'M' + s.join('L')).join('')}" pathLength="1" style="fill:none;stroke:${color};stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round"/>${last}</svg>`;
 }
 
 const STAGES = [
@@ -698,14 +698,14 @@ function dials(d) {
       label: `Steps ${isNum(d.strain.steps) ? fmt(d.strain.steps) : 'not available'} of ${fmt(M.steps.goal)}`,
     },
   ];
-  const SW = 15, GAP = 5;
+  const SW = 9, GAP = 7;
   const arcs = rings.map((r, i) => {
     const R = 102 - SW / 2 - i * (SW + GAP);
     const C = 2 * Math.PI * R;
     const arc = isNum(r.frac)
       ? `<circle class="dial-arc" cx="110" cy="110" r="${R}" stroke-width="${SW}" style="stroke:${r.color};--c:${r.color}" stroke-dasharray="${C}" stroke-dashoffset="${C}" data-target="${C * (1 - Math.min(1, Math.max(0, r.frac)))}"/>`
       : '';
-    return `<circle class="dial-track" cx="110" cy="110" r="${R}" stroke-width="${SW}" style="stroke:color-mix(in srgb, ${r.color} 14%, transparent)"/>${arc}`;
+    return `<circle class="dial-track" cx="110" cy="110" r="${R}" stroke-width="${SW}" style="stroke:color-mix(in srgb, ${r.color} 12%, transparent)"/>${arc}`;
   }).join('');
   const rows = rings.map(r => `<a class="ring-row" style="--c:${r.color}" href="${hrefMetric(r.key, M[r.key].defaultRange, d.date)}" aria-label="${esc(r.label)}. Open details">
       <span class="ring-dot" aria-hidden="true"></span>
@@ -727,12 +727,12 @@ function insightCard(d) {
   const t = tierOf(rec);
   const rel = relativeDay(d.date);
   const chips = [
-    t && perf() ? `<span class="chip">${ph('zap', '', 'duotone')}Aim for <b>${t.strain}</b> strain</span>` : '',
-    isNum(d.sleep.duration_minutes) ? `<a class="chip" href="${hrefMetric('sleep', 'day', d.date)}">${ph('moon', '', 'duotone')}Slept <b>${fmtDur(d.sleep.duration_minutes)}</b></a>` : '',
-    isNum(d.strain.steps) ? `<a class="chip" href="${hrefMetric('steps', 'day', d.date)}">${ph('footprints', '', 'duotone')}<b>${fmt(d.strain.steps)}</b> steps</a>` : '',
+    t && perf() ? `<span class="chip">${ph('zap', '', 'regular')}Aim for <b>${t.strain}</b> strain</span>` : '',
+    isNum(d.sleep.duration_minutes) ? `<a class="chip" href="${hrefMetric('sleep', 'day', d.date)}">${ph('moon', '', 'regular')}Slept <b>${fmtDur(d.sleep.duration_minutes)}</b></a>` : '',
+    isNum(d.strain.steps) ? `<a class="chip" href="${hrefMetric('steps', 'day', d.date)}">${ph('footprints', '', 'regular')}<b>${fmt(d.strain.steps)}</b> steps</a>` : '',
   ].join('');
   return `<section class="insight reveal" aria-label="Insight">
-    <span class="insight-icon live" data-anim="sparkles">${ph('sparkles', '', 'duotone')}</span>
+    <span class="insight-icon live" data-anim="sparkles">${ph('sparkles', '', 'regular')}</span>
     <div class="insight-body">
       <span class="label insight-date">${esc(rel ? `${rel} · ${fullDate(d.date)}` : fullDate(d.date))}</span>
       <h1>${esc(story.head)}</h1>
@@ -752,21 +752,25 @@ function dayBlocks(d) {
     const a = parseLocal(st[0].time).getTime();
     const last = st[st.length - 1];
     const b = parseLocal(last.time).getTime() + last.seconds * 1000;
-    if (b > dayStart) blocks.push({ kind: 'sleep', from: toMin(a), to: toMin(b), label: 'Sleep', tip: `Sleep ${hhmm(new Date(a))}–${hhmm(new Date(b))}` });
+    if (b > dayStart) blocks.push({ kind: 'sleep', from: toMin(a), to: toMin(b), label: 'Sleep', tip: `Sleep ${hhmm(new Date(a))}–${hhmm(new Date(b))}`, a, b, href: hrefMetric('sleep', 'day', d.date) });
   }
   const nextIdx = dateIndex(isoOf(addDays(parseDate(d.date), 1)));
   const next = nextIdx >= 0 ? days()[nextIdx] : null;
   const nst = next ? (next.sleep.hypnogram || []).filter(s => s.time && s.seconds) : [];
   if (nst.length && nst[0].time.slice(0, 10) === d.date) {
     const a = parseLocal(nst[0].time).getTime();
-    blocks.push({ kind: 'sleep', from: toMin(a), to: 1440, label: 'Sleep', tip: `Sleep from ${hhmm(new Date(a))}` });
+    const nl = nst[nst.length - 1];
+    const b = parseLocal(nl.time).getTime() + nl.seconds * 1000;
+    blocks.push({ kind: 'sleep', from: toMin(a), to: 1440, label: 'Sleep', tip: `Sleep from ${hhmm(new Date(a))}`, a, b, href: hrefMetric('sleep', 'day', next.date) });
   }
-  for (const w of d.strain.workouts || []) {
+  (d.strain.workouts || []).forEach((w, i) => {
     const [h, m] = (w.time || '0:0').split(':').map(Number);
     const from = h * 60 + m;
+    const a = dayStart + from * 60000;
     blocks.push({ kind: 'workout', from, to: Math.min(1440, from + (w.duration_minutes || 0)), label: w.name,
-      tip: `${w.name} · ${w.time} · ${w.duration_minutes} min${w.avg_hr ? ` · ${w.avg_hr} bpm` : ''}` });
-  }
+      tip: `${w.name} · ${w.time} · ${w.duration_minutes} min${w.avg_hr ? ` · ${w.avg_hr} bpm` : ''}`,
+      a, b: a + (w.duration_minutes || 0) * 60000, href: hrefWorkout(d.date, i) });
+  });
   return blocks;
 }
 
@@ -806,16 +810,37 @@ function myDayChart(w, d) {
   if (relativeDay(d.date) === 'Today') {
     const n = new Date();
     const nx = x(n.getHours() * 60 + n.getMinutes());
-    now = `<line x1="${nx}" x2="${nx}" y1="${top - 18}" y2="${plotB}" style="stroke:var(--text-2);stroke-width:1;stroke-dasharray:2 3"/><text x="${nx}" y="${top - 22}" text-anchor="middle" style="fill:var(--text-2);font-weight:600">NOW</text>`;
+    const px = Math.min(Math.max(nx, padL + 21), w - padR - 21);
+    now = `<line x1="${nx}" x2="${nx}" y1="${top - 8}" y2="${plotB}" style="stroke:var(--text-primary);stroke-width:1"/>`
+      + `<rect x="${px - 21}" y="${top - 25}" width="42" height="18" rx="9" style="fill:var(--text-primary)"/>`
+      + `<text x="${px}" y="${top - 12}" text-anchor="middle" style="fill:var(--bg);font-weight:600;font-size:10.5px">${hhmm(n)}</text>`;
   }
   const xs = mins.map(m => x(m));
   const tips = hr.map(p => `<b>${p.bpm} bpm</b><span>${p.time}</span>`);
   const hovers = xs.map((xx, i) => `<g class="hover-mark"><line x1="${xx}" x2="${xx}" y1="${top}" y2="${plotB}" style="stroke:var(--line-strong)"/><circle cx="${xx}" cy="${y(bpm[i])}" r="4.5" style="fill:var(--heart);stroke:var(--card);stroke-width:2"/></g>`);
   return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="Heart rate through the day">
-    <defs><linearGradient id="hrFade" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF6F8E" stop-opacity=".32"/><stop offset="1" stop-color="#FF6F8E" stop-opacity="0"/></linearGradient></defs>
+    <defs><linearGradient id="hrFade" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--heart)" stop-opacity=".28"/><stop offset="1" style="stop-color:var(--heart)" stop-opacity="0"/></linearGradient></defs>
     ${grid}${blocks}${area}${rhrLine}${line}${now}${xt}
     ${hr.length ? hitStrips(xs, top, plotB - top, tips, null, hovers) : ''}
   </svg>`;
+}
+
+// The day's sleep and workouts as a list under the My Day chart: dot, name,
+// time range and whether it's done, happening now or still to come.
+function dayEvents(d) {
+  const now = Date.now();
+  const blocks = dayBlocks(d).filter(b => isNum(b.a)).sort((x, y) => x.a - y.a);
+  if (!blocks.length) return '';
+  return `<div class="events">${blocks.map(b => {
+    const status = isNum(b.b) && b.b <= now ? 'Completed' : b.a <= now ? 'In progress' : 'Upcoming';
+    const c = b.kind === 'sleep' ? 'var(--sleep)' : 'var(--strain)';
+    return `<a class="event" href="${b.href}" style="--c:${c}">
+      <span class="event-dot" aria-hidden="true"></span>
+      <span class="event-main"><span class="event-name">${esc(b.label)}</span><span class="event-time">${hhmm(new Date(b.a))}${isNum(b.b) ? ` – ${hhmm(new Date(b.b))}` : ''}</span></span>
+      <span class="event-status ${status === 'In progress' ? 'now' : ''}">${status}</span>
+      ${icon('chev', 'workout-chev')}
+    </a>`;
+  }).join('')}</div>`;
 }
 
 function myDayPanel(d) {
@@ -835,6 +860,7 @@ function myDayPanel(d) {
       </div>
     </div>
     ${slot('myday', w => myDayChart(w, d))}
+    ${dayEvents(d)}
   </section>`;
 }
 
@@ -893,13 +919,13 @@ function trendsPanel() {
 
 // "3.0 younger than your age" for the body age card.
 function bioAgeDelta(b) {
-  if (!b || b.status !== 'ok') return `<div class="delta">${b && b.status === 'calibrating' ? 'Calibrating' : ''}</div>`;
+  if (!b || b.status !== 'ok') return `<div class="delta">${b && b.status === 'calibrating' ? '<span>Calibrating</span>' : ''}</div>`;
   const dir = b.delta < 0 ? 'younger' : b.delta > 0 ? 'older' : '';
   const cls = b.delta < 0 ? 'good' : b.delta > 0 ? 'poor' : '';
-  return `<div class="delta ${cls}">${dir ? `${fmt(Math.abs(b.delta), 1)} ${dir} than your age` : 'Same as your age'}</div>`;
+  return `<div class="delta ${cls}"><span>${dir ? `${fmt(Math.abs(b.delta), 1)} ${dir} than your age` : 'Same as your age'}</span></div>`;
 }
 
-function metricCard(key, { wide = false } = {}) {
+function metricCard(key, { wide = false, glow = false } = {}) {
   const m = M[key];
   const d = day();
   const v = m.pick(d);
@@ -908,7 +934,7 @@ function metricCard(key, { wide = false } = {}) {
   const vals = win.map(i => m.pick(days()[i]));
   // A recorded night with no score was logged without sleep stages (Fitbit usually doesn't score those either).
   const missing = key === 'sleepScore' && isNum(d.sleep.duration_minutes) ? 'No score for this night' : 'No data';
-  const value = isNum(v) ? `<div class="card-value">${valueHtml(key, v, 'home-' + key)}</div>` : `<div class="card-value none">${missing}</div>`;
+  const value = isNum(v) ? `<div class="card-value ${m.unit === 'dur' ? 'dur' : ''}">${valueHtml(key, v, 'home-' + key)}</div>` : `<div class="card-value none">${missing}</div>`;
   const estimated = isNum(v) && m.isEstimate && m.isEstimate(d);
   let extra = '';
   if (key === 'sleep' && isNum(v)) {
@@ -917,8 +943,8 @@ function metricCard(key, { wide = false } = {}) {
     extra = `<div class="stage-strip" aria-hidden="true">${STAGES.map(s => `<span style="flex-grow:${mins[s.key] || 0};background:${s.color}"></span>`).join('')}</div>
       <div class="legend">${STAGES.map(s => `<span><i style="background:${s.color}"></i>${s.label}<b>${fmtDur(mins[s.key])}</b></span>`).join('')}</div>`;
   }
-  return `<a class="card reveal ${wide ? 'wide' : ''}" href="${hrefMetric(key, m.defaultRange, iso)}" style="--accent:${accent(key)}" aria-label="${esc(m.label)}: ${esc(valueText(key, v))}${estimated ? ', estimated' : ''}. Open details">
-    <div class="card-top">${glyph(key, d)}<span class="card-label">${esc(m.cardLabel || m.label)}</span>${estimated ? '<span class="tag" title="Estimated: Google’s API doesn’t provide Fitbit’s sleep score">Est.</span>' : ''}${icon('chev', 'chev')}</div>
+  return `<a class="card reveal ${wide ? 'wide' : ''} ${glow ? 'glow' : ''}" href="${hrefMetric(key, m.defaultRange, iso)}" style="--accent:${accent(key)}" aria-label="${esc(m.label)}: ${esc(valueText(key, v))}${estimated ? ', estimated' : ''}. Open details">
+    <div class="card-top">${glyph(key, d)}<span class="card-label">${esc(m.cardLabel || m.label)}</span>${estimated ? '<span class="tag" title="Estimated: Google’s API doesn’t provide Fitbit’s sleep score">Est.</span>' : ''}${ph('arrow-up-right', 'card-go')}</div>
     ${value}
     ${key === 'bioAge' ? bioAgeDelta(d.bio_age) : deltaHtml(key, state.idx, window.matchMedia('(max-width: 720px)').matches)}
     ${extra || `<div class="spark">${slot('spark-' + key, w => sparkChart(w, key, vals, vals.length - 1))}</div>`}
@@ -948,7 +974,7 @@ const endTime = w => {
 function workoutRow(iso, i, w, { showDate = false } = {}) {
   const meta = [showDate ? shortDate(iso) : null, showDate ? w.time : `${w.time}–${endTime(w)}`, `${w.duration_minutes} min`].filter(Boolean).join(' · ');
   return `<a class="workout" href="${hrefWorkout(iso, i)}">
-      <span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'duotone')}</span>
+      <span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'regular')}</span>
       <div class="workout-main"><div class="workout-name">${esc(w.name)}</div><div class="workout-meta">${esc(meta)}</div></div>
       <div class="workout-strain">${perf() && isNum(w.strain) ? `<b>${fmt(w.strain, 1)}</b><span class="label">strain</span>` : `<b>${w.duration_minutes}</b><span class="label">min</span>`}</div>
       ${icon('chev', 'workout-chev')}
@@ -959,7 +985,7 @@ function workoutsCard() {
   const ws = day().strain.workouts || [];
   const body = ws.length ? `<div class="workouts">${ws.map((w, i) => workoutRow(day().date, i, w)).join('')}</div>` : '<p class="empty">No workouts logged.</p>';
   return `<div class="card full reveal" style="--accent:var(--strain)">
-    <div class="card-top"><span class="glyph">${ph('dumbbell', '', 'duotone')}</span><span class="card-label">Workouts</span></div>
+    <div class="card-top"><span class="glyph">${ph('dumbbell', '', 'regular')}</span><span class="card-label">Workouts</span></div>
     ${body}
   </div>`;
 }
@@ -1150,7 +1176,7 @@ function renderWorkout() {
   return `
     <div class="detail-head">
       <a class="back" href="${hrefMetric(activityKey(), 'day', iso)}" aria-label="Back to ${perf() ? 'strain' : 'activity'}">${icon('back')}<span>${perf() ? 'Strain' : 'Activity'}</span></a>
-      <h1 class="detail-title"><span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'duotone')}</span><span>${esc(w.name)}</span></h1>
+      <h1 class="detail-title"><span class="glyph" style="--accent:var(--strain)">${ph(workoutIcon(w.name), '', 'regular')}</span><span>${esc(w.name)}</span></h1>
     </div>
     <p class="w-when">${esc(fullDate(iso))} · ${esc(w.time)}–${esc(endTime(w))}</p>
     ${workoutSummary(w) ? `<p class="w-summary">${esc(workoutSummary(w))}</p>` : ''}
@@ -1209,7 +1235,7 @@ function renderHome() {
 
   const sections = HOME_SECTIONS[state.mode].map(sec => `<section class="section">
       <div class="section-head"><h2>${sec.title}</h2></div>
-      <div class="grid">${sec.keys.map(k => metricCard(k, { wide: k === 'sleep' })).join('')}${sec.workouts ? workoutsCard() : ''}</div>
+      <div class="grid">${sec.keys.map((k, i) => metricCard(k, { wide: k === 'sleep', glow: k === 'sleep' || (sec.title === 'Key metrics' && i === 0) })).join('')}${sec.workouts ? workoutsCard() : ''}</div>
     </section>`).join('');
 
   return `
@@ -1360,7 +1386,7 @@ function openLogSheet(edit = null) {
   const save = sheet.querySelector('.log-save');
   const showErr = msg => { err.textContent = msg; err.hidden = !msg; };
   const sync = () => {
-    sheet.querySelector('.log-act-icon').innerHTML = ph(selected ? selected.icon : 'search', '', 'duotone');
+    sheet.querySelector('.log-act-icon').innerHTML = ph(selected ? selected.icon : 'search', '', 'regular');
     sheet.querySelector('.log-sub').textContent = q.value.trim() && !(selected && q.value === selected.label) ? 'Matching activities' : selected ? 'Similar activities' : 'Suggested';
     chips.innerHTML = activityChips(q.value, selected);
     sheet.querySelector('.log-distance').hidden = !(selected && selected.distance);
@@ -1574,7 +1600,7 @@ function renderDetail() {
       <h1 class="detail-title">${glyph(key)}<span>${esc(m.label)}</span></h1>
     </div>
 
-    <section class="panel" style="--accent:${color}">
+    <section class="panel glow" style="--accent:${color}">
       <div class="controls">${seg}${periodNav}</div>
       ${body.panel}
     </section>
@@ -2110,7 +2136,7 @@ function dayEnvelopeChart(data, rhr, maxHr, focus, stats) {
     const hits = `<g class="scrub-mark" hidden><line y1="${top - 8}" y2="${plotB}"/><circle r="4.5"/></g>
       <rect class="day-scrub" x="${padL}" y="${top - 8}" width="${w - padR - padL}" height="${plotB - top + 8}" data-pts='${scrubPts}'/>`;
     return `<svg class="chart" width="${w}" height="${H}" viewBox="0 0 ${w} ${H}" role="img" aria-label="Heart rate through the day">
-      <defs><linearGradient id="dayFade" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF6F8E" stop-opacity=".22"/><stop offset="1" stop-color="#FF6F8E" stop-opacity="0"/></linearGradient></defs>
+      <defs><linearGradient id="dayFade" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--heart)" stop-opacity=".2"/><stop offset="1" style="stop-color:var(--heart)" stop-opacity="0"/></linearGradient></defs>
       ${band}<path d="${area}" fill="url(#dayFade)"/>${rest}
       <path d="${line}" style="fill:none;stroke:var(--heart);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>
       ${peak}${labels}${xt}${hits}
@@ -2505,6 +2531,7 @@ function render({ pageEnter = false } = {}) {
   charts = {};
   const main = $('#main');
   const page = state.route.page;
+  document.body.classList.toggle('is-home', page === 'home');
   try {
     main.innerHTML = page === 'home' ? renderHome() : page === 'workout' ? renderWorkout() : renderDetail();
   } catch (error) {
@@ -2749,6 +2776,10 @@ function showData(data, { demo = false } = {}) {
   const p = data.profile;
   const initials = (p.name || '').split(/\s+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase();
   $('#avatar').textContent = initials;
+  // Today's greeting: "Hello," then the first name, or just "Hello." without one.
+  const first = demo ? '' : (p.name || '').split(/\s+/).filter(Boolean)[0] || '';
+  $('#greetHello').hidden = !first;
+  $('#greetName').textContent = first ? `${first}.` : 'Hello.';
   $('#avatar').hidden = !initials || demo;
   $('#demoBanner').hidden = !demo;
   const o = data.overview;

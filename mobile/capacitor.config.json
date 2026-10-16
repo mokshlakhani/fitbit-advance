@@ -2,7 +2,7 @@
   "appId": "app.datastrap.personal",
   "appName": "DataStrap",
   "webDir": "www",
-  "backgroundColor": "#050506",
+  "backgroundColor": "#0A0A0B",
   "android": {
     "adjustMarginsForEdgeToEdge": "auto"
   },
