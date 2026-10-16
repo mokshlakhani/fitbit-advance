@@ -945,7 +945,7 @@ function metricCard(key, { wide = false, glow = false } = {}) {
       <div class="legend">${STAGES.map(s => `<span><i style="background:${s.color}"></i>${s.label}<b>${fmtDur(mins[s.key])}</b></span>`).join('')}</div>`;
   }
   return `<a class="card reveal ${wide ? 'wide' : ''} ${glow ? 'glow' : ''}" href="${hrefMetric(key, m.defaultRange, iso)}" style="--accent:${accent(key)}" aria-label="${esc(m.label)}: ${esc(valueText(key, v))}${estimated ? ', estimated' : ''}. Open details">
-    <div class="card-top">${glyph(key, d)}<span class="card-label">${esc(m.cardLabel || m.label)}</span>${estimated ? '<span class="tag" title="Estimated: Google’s API doesn’t provide Fitbit’s sleep score">Est.</span>' : ''}${ph('arrow-up-right', 'card-go')}</div>
+    <div class="card-top">${glyph(key, d)}<span class="card-label">${esc(m.cardLabel || m.label)}</span>${ph('arrow-up-right', 'card-go')}</div>
     ${value}
     ${key === 'bioAge' ? bioAgeDelta(d.bio_age) : deltaHtml(key, state.idx, window.matchMedia('(max-width: 720px)').matches)}
     ${extra || `<div class="spark">${slot('spark-' + key, w => sparkChart(w, key, vals, vals.length - 1))}</div>`}
@@ -1566,6 +1566,7 @@ function periodSummary(key, vals) {
   };
 }
 
+let lastSeg = null;
 function renderDetail() {
   const { key, range } = state.route;
   const m = M[key];
@@ -1582,8 +1583,12 @@ function renderDetail() {
   const prevHref = p.start > firstDate ? hrefMetric(key, range, shiftAnchor(range, iso, -1)) : null;
   const nextHref = p.end < lastDate ? hrefMetric(key, range, shiftAnchor(range, iso, 1)) : null;
 
+  // The highlight starts where it was on this metric's last range and slides over (render()).
+  const toIdx = RANGES.findIndex(r => r.key === range);
+  const fromIdx = lastSeg && lastSeg.key === key ? lastSeg.idx : toIdx;
+  lastSeg = { key, idx: toIdx };
   const seg = `<nav class="segmented" aria-label="Time range" style="--n:${RANGES.length}">
-    <span class="thumb" style="width:calc((100% - 6px) / ${RANGES.length});transform:translateX(${RANGES.findIndex(r => r.key === range) * 100}%)"></span>
+    <span class="thumb" data-to="${toIdx}" style="width:calc((100% - 8px) / ${RANGES.length});transform:translateX(${fromIdx * 100}%)"></span>
     ${RANGES.map(r => `<a href="${hrefMetric(key, r.key, iso)}" data-replace aria-current="${r.key === range}" aria-label="${r.label}">${r.short ? `<span class="long">${r.label}</span><span class="short">${r.short}</span>` : r.label}</a>`).join('')}
   </nav>`;
   const periodNav = `<div class="period">
@@ -2560,6 +2565,7 @@ function render({ pageEnter = false } = {}) {
   // Rings start empty and sweep to their value on the next frame.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     main.querySelectorAll('[data-target]').forEach(arc => { arc.style.strokeDashoffset = arc.dataset.target; });
+    main.querySelectorAll('.segmented .thumb[data-to]').forEach(t => { t.style.transform = `translateX(${t.dataset.to * 100}%)`; });
   }));
   observeReveals(main, { cascade: renders === 1 });
   if (pageEnter) main.focus({ preventScroll: true });

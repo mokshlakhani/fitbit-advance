@@ -166,7 +166,7 @@ p, .note { text-wrap: pretty; }
    two or three per screen (app.js adds .glow). */
 .glow {
   background:
-    radial-gradient(110% 85% at 0% 0%, color-mix(in srgb, var(--glow, var(--accent)) 16%, transparent), transparent 62%),
+    radial-gradient(130% 100% at 0% 0%, color-mix(in srgb, var(--glow, var(--accent)) 28%, transparent), transparent 68%),
     var(--surface);
 }
 
@@ -456,7 +456,7 @@ a.icon-btn[aria-disabled="true"] { pointer-events: none; }
   padding: 18px 14px 18px 16px;
   border-radius: var(--r-card);
   background:
-    radial-gradient(110% 85% at 0% 0%, color-mix(in srgb, var(--mood) 14%, transparent), transparent 62%),
+    radial-gradient(130% 100% at 0% 0%, color-mix(in srgb, var(--mood) 26%, transparent), transparent 68%),
     var(--surface);
 }
 .rings-art { width: 100%; max-width: 320px; aspect-ratio: 1; justify-self: center; }
@@ -694,7 +694,7 @@ a.workout:active { background: var(--highlight); }
 .w-stat.accent {
   grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
   border-radius: var(--r-card);
-  background: radial-gradient(110% 85% at 0% 0%, color-mix(in srgb, var(--strain) 18%, transparent), transparent 62%), var(--surface);
+  background: radial-gradient(130% 100% at 0% 0%, color-mix(in srgb, var(--strain) 28%, transparent), transparent 68%), var(--surface);
 }
 .w-stat-value { font-size: 1.375rem; font-weight: 500; letter-spacing: -0.02em; margin-top: 2px; }
 .w-stat.accent .w-stat-value { font-size: 2.5rem; font-weight: 400; color: var(--text-primary); }
@@ -894,6 +894,13 @@ a.workout:active { background: var(--highlight); }
 }
 .segmented a[aria-current="true"] { color: var(--text-primary); }
 @media (hover: hover) { .segmented a:hover { color: var(--text-primary); } }
+/* During a range switch (a view transition) the control is shown live instead
+   of cross-faded, so its highlight can slide from the old range to the new
+   one (app.js starts it at the old position and moves it after render). */
+.segmented { view-transition-name: range-seg; }
+::view-transition-group(range-seg) { animation-duration: 0s; }
+::view-transition-old(range-seg) { display: none; }
+::view-transition-new(range-seg) { animation: none; }
 .segmented .long { display: none; }
 .segmented .short { display: inline; }
 
@@ -941,7 +948,7 @@ a.workout:active { background: var(--highlight); }
   z-index: 1;
   max-width: var(--max);
   margin: 0 auto;
-  padding: 8px var(--gutter) calc(var(--tabbar-h) + 40px + env(safe-area-inset-bottom));
+  padding: 8px var(--gutter) calc(var(--tabbar-h) + 96px + env(safe-area-inset-bottom));
   color: var(--text-tertiary);
   font-size: 0.75rem;
   text-align: center;
