@@ -1288,9 +1288,8 @@ function renderHome() {
       <div class="grid">${sec.keys.map((k, i) => metricCard(k, { wide: k === 'sleep', glow: k === 'sleep' || (sec.title === 'Key metrics' && i === 0) })).join('')}${sec.workouts ? workoutsCard() : ''}</div>
     </section>`).join('');
 
-  // One thin row under the date: the mode switch and Log +, so nothing floats
-  // over the page.
-  const topRow = `<div class="home-top reveal">${modeSwitch()}${canLog() ? `<button type="button" class="log-btn" data-log-open aria-label="Log an activity">Log ${ph('plus', '', 'bold')}</button>` : ''}</div>`;
+  // The mode switch, thin and centred, right under the date.
+  const topRow = `<div class="home-top reveal">${modeSwitch()}</div>`;
   return `
     ${topRow}
     ${state.portrait && !state.demo ? portraitHero(d) : ''}
@@ -1300,6 +1299,7 @@ function renderHome() {
     ${myDayPanel(d)}
     ${sections}
     ${perf() ? `<section class="section"><div class="section-head"><h2>Trends</h2></div>${trendsPanel()}</section>` : ''}
+    ${canLog() ? `<button type="button" class="log-fab" data-log-open aria-label="Log an activity">Log ${ph('plus', '', 'bold')}</button>` : ''}
   `;
 }
 
