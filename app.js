@@ -461,7 +461,8 @@ function hypnogram(w, stages) {
 function rangeGauge(w, key, v, r) {
   const H = 62;
   const color = accent(key);
-  const lo = Math.min(r.min, v), hi = Math.max(r.max, v);
+  // The usual band (lo–hi) can be wider than the 30-day min–max; keep it on the track.
+  const lo = Math.min(r.min, r.lo, v), hi = Math.max(r.max, r.hi, v);
   const pad = (hi - lo) * 0.08 || 1;
   const x = scale(lo - pad, hi + pad, 8, w - 8);
   const yT = 22;
@@ -1893,7 +1894,7 @@ function detailDay(key, color) {
   }
   if (key === 'sleepScore' && isNum(v)) {
     const model = state.data.overview.sleep_score_model || {};
-    note = d.sleep.score_source === 'app' ? 'From the Fitbit app' : `Estimated · typically within ±${model.mae}`;
+    note = d.sleep.score_source === 'app' ? 'From the Fitbit app' : 'Estimated' + (isNum(model.mae) ? ` · typically within ±${model.mae}` : '');
     noteCls = '';
   }
   const emptyText = key === 'sleepScore' && isNum(d.sleep.duration_minutes) ? 'No score'
