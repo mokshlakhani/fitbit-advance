@@ -1228,6 +1228,53 @@ function modeSwitch() {
   </div>`;
 }
 
+// ---------- Portrait hero (Today) ----------
+// A personal portrait (portrait.webp, git-ignored, never in the repo or the
+// public web app) with three of the night's vitals pinned to it. Shown only
+// when that file exists and the data isn't the sample person's.
+const HERO_SPOTS = {
+  // Marker positions as % of the portrait (x across, y down) and where each label sits.
+  head: { x: 26, y: 27, side: 'tl' },
+  throat: { x: 66.7, y: 52.3, side: 'r' },
+  shoulder: { x: 34.7, y: 71.6, side: 'bl' },
+};
+const HERO_VITALS = {
+  perf: [['head', 'rhr', 'Heart'], ['throat', 'resp', 'Breathing'], ['shoulder', 'temp', 'Skin temp']],
+  std: [['head', 'rhr', 'Heart'], ['throat', 'spo2', 'Blood oxygen'], ['shoulder', 'hrv', 'HRV']],
+};
+// The portrait box: the image takes 69% of the width from 8.4% in, full height.
+const HERO_IMG = { left: 8.4, width: 69 };
+
+function heroStatus(key, v) {
+  if (!isNum(v)) return 'No data';
+  const r = normalRange(key, state.idx);
+  if (!r) return '';
+  return v > r.hi ? 'Above usual' : v < r.lo ? 'Below usual' : 'Normal';
+}
+
+function portraitHero(d) {
+  const spots = HERO_VITALS[state.mode].map(([spot, key, label]) => {
+    const p = HERO_SPOTS[spot];
+    const v = M[key].pick(d);
+    return { ...p, key, label, v, x: HERO_IMG.left + HERO_IMG.width * p.x / 100 };
+  });
+  const lines = spots.map(s => {
+    // From the label's edge to the marker.
+    const [lx, ly] = s.side === 'tl' ? [17, 17] : s.side === 'r' ? [75, s.y + 7] : [17, 79];
+    return `<line x1="${lx}" y1="${ly}" x2="${s.x}" y2="${s.y}" vector-effect="non-scaling-stroke"/>`;
+  }).join('');
+  return `<section class="hero reveal" aria-label="Last night's vitals">
+    <img class="hero-img" src="portrait.webp" alt="" style="left:${HERO_IMG.left}%;width:${HERO_IMG.width}%">
+    <svg class="hero-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>
+    ${spots.map((s, i) => `<span class="hero-dot" style="left:${s.x}%;top:${s.y}%;--i:${i}" aria-hidden="true"></span>
+      <a class="hero-tag ${s.side}" href="${hrefMetric(s.key, M[s.key].defaultRange, d.date)}" style="${s.side === 'r' ? `top:${s.y + 7}%` : ''}">
+        <span class="hero-label">${esc(s.label)}</span>
+        <span class="hero-value">${isNum(s.v) ? valueHtml(s.key, s.v, 'hero-' + s.key) : '—'}</span>
+        <span class="hero-status">${esc(heroStatus(s.key, s.v))}</span>
+      </a>`).join('')}
+  </section>`;
+}
+
 function renderHome() {
   const d = day();
   const rec = M.recovery.pick(d);
@@ -1240,6 +1287,7 @@ function renderHome() {
     </section>`).join('');
 
   return `
+    ${state.portrait && !state.demo ? portraitHero(d) : ''}
     ${weekStrip()}
     ${modeSwitch()}
     ${dials(d)}
@@ -2810,6 +2858,14 @@ window.DataStrap = {
     route();
   },
 };
+
+// The portrait hero appears once portrait.webp loads (only personal builds have it).
+const portraitProbe = new Image();
+portraitProbe.onload = () => {
+  state.portrait = true;
+  if (state.data && state.route.page === 'home') render();
+};
+portraitProbe.src = 'portrait.webp';
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (window.DataStrapHost) {

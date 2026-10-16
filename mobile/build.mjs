@@ -8,7 +8,8 @@
 //                             Google client ID from web.config.json or the
 //                             DATASTRAP_GOOGLE_CLIENT_ID environment variable
 //
-// www/ and web/ are build output and gitignored (seed.json is personal data).
+// www/ and web/ are build output and gitignored (seed.json and portrait.webp
+// are personal data).
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
@@ -100,4 +101,9 @@ if (!WEB && !process.argv.includes('--no-seed') && existsSync(python) && existsS
   console.log('Building seed.json from this computer’s data…');
   execFileSync(python, [join(here, 'make_seed.py'), join(out, 'seed.json')], { stdio: ['ignore', 'ignore', 'inherit'] });
 }
-console.log(`${WEB ? 'web' : 'www'} ready${existsSync(join(out, 'seed.json')) ? ' (with seed.json)' : ''}`);
+// Personal portrait for the Today hero (git-ignored). Android builds only:
+// the web app is public, so it never gets it.
+if (!WEB && !process.argv.includes('--no-seed') && existsSync(join(root, 'portrait.webp'))) {
+  cpSync(join(root, 'portrait.webp'), join(out, 'portrait.webp'));
+}
+console.log(`${WEB ? 'web' : 'www'} ready${existsSync(join(out, 'seed.json')) ? ' (with seed.json)' : ''}${existsSync(join(out, 'portrait.webp')) ? ' (with portrait)' : ''}`);
