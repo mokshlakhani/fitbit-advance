@@ -92,6 +92,27 @@ if (WEB) {
   html = html.replace(/(<script src="app\.js[^"]*"><\/script>)/, '<script src="m/capacitor.js"></script>\n  <script type="module" src="m/mobile.js"></script>\n  $1');
 }
 if (!html.includes('m/mobile.js')) throw new Error('index.html changed shape: could not add the mobile scripts');
+
+// Content Security Policy: only the app's own scripts run, and the page can
+// only talk to Google's APIs and the addresses in config.json. If something
+// ever slipped markup into a page, it couldn't load code or send data elsewhere.
+const origin = u => { try { return new URL(u).origin; } catch { return null; } };
+const connect = new Set(["'self'", 'https://health.googleapis.com', 'https://www.googleapis.com', 'https://oauth2.googleapis.com',
+  ...[appConfig.tokenServer, appConfig.feedback && appConfig.feedback.formUrl].map(origin).filter(Boolean)]);
+const csp = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // style="" attributes in drawn markup
+  'font-src https://fonts.gstatic.com',
+  "img-src 'self' data: blob:",
+  `connect-src ${[...connect].join(' ')}`,
+  "worker-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+].join('; ');
+html = html.replace('<meta charset="UTF-8">', `<meta charset="UTF-8">\n  <meta http-equiv="Content-Security-Policy" content="${csp}">`);
+if (!html.includes('Content-Security-Policy')) throw new Error('index.html changed shape: could not add the Content Security Policy');
 writeFileSync(join(out, 'index.html'), html);
 writeFileSync(join(out, 'config.json'), JSON.stringify(appConfig));
 

@@ -2510,9 +2510,9 @@ function showPageError(main, error) {
   main.innerHTML = `<section class="panel page-error">
       <div class="panel-title"><span class="label">Couldn’t show this page</span></div>
       <p>Something in your data tripped up this page. Other tabs still work.</p>
-      ${canSend ? `<p class="note">Send a report so it can be fixed. It includes only the technical error, not your health data.</p>
+      ${canSend ? `<p class="note">Send a report so it can be fixed. This is exactly what it sends: the technical error, with personal details removed.</p>
       <button type="button" class="log-save" data-send-report>Send report</button>` : ''}
-      <pre class="page-error-detail">${esc(report)}</pre>
+      <pre class="page-error-detail">${esc(canSend && window.DataStrapHost.previewReport ? window.DataStrapHost.previewReport(report) : report)}</pre>
     </section>`;
   const btn = main.querySelector('[data-send-report]');
   if (btn) btn.addEventListener('click', async () => {
