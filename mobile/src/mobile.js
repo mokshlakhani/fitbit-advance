@@ -443,7 +443,7 @@ async function portraitSectionHtml() {
 function portraitSheetHtml() {
   const p = pendingPortrait;
   return `<h2 class="m-title">Your Today portrait</h2>
-    <p class="m-note">Choose a clear photo of just you, facing the camera. DataStrap sends it once to Google’s Gemini, through DataStrap’s helper, which keeps nothing, to make a side-profile studio portrait in the app’s style. The portrait is saved only on this phone. You get 3 tries a day.</p>
+    <p class="m-note">Choose a clear photo of just you, facing the camera. DataStrap sends it once to Google’s Gemini, through DataStrap’s helper, which keeps nothing, to make a side-profile studio portrait in the app’s style. The portrait is saved only on this phone. You get 3 tries a week.</p>
     ${p ? `<div class="m-portrait-preview"><img src="data:${p.mime};base64,${p.data}" alt="Your new portrait"></div>
       <div class="m-pair"><button class="m-btn primary" data-act="portrait-use">Use this</button><button class="m-btn" data-act="portrait-retry">Try another photo</button></div>`
     : `<label class="m-check"><input type="checkbox" data-field="portraitConsent"><span>This is a photo of me, and I agree to it being sent to Google Gemini to make my portrait.</span></label>
@@ -460,16 +460,16 @@ async function makePortrait(file) {
   status.innerHTML = '<span class="m-status"><span class="m-spin"></span>Making your portrait. This takes about 20 seconds.</span>';
   let image;
   try { image = await preparePhoto(file); } catch (err) { status.textContent = err.message; busy(false); return; }
-  const res = await requestPortrait(portraitServer, getToken, image);
+  const res = await requestPortrait(portraitServer, getToken, image, (await profile()).sex);
   if (res.error) {
-    status.textContent = `${res.error}${Number.isFinite(res.remaining) ? ` (${res.remaining} ${res.remaining === 1 ? 'try' : 'tries'} left today)` : ''}`;
+    status.textContent = `${res.error}${Number.isFinite(res.remaining) ? ` (${res.remaining} ${res.remaining === 1 ? 'try' : 'tries'} left this week)` : ''}`;
     busy(false);
     return;
   }
   pendingPortrait = res.portrait;
   renderSheet('portrait');
   const note = document.querySelector('#syncSheet .m-portrait-status');
-  if (note && Number.isFinite(res.remaining)) note.textContent = `${res.remaining} ${res.remaining === 1 ? 'try' : 'tries'} left today.`;
+  if (note && Number.isFinite(res.remaining)) note.textContent = `${res.remaining} ${res.remaining === 1 ? 'try' : 'tries'} left this week.`;
 }
 
 let sheetMode = 'all'; // 'feedback' when opened from the feedback button; 'portrait' for the portrait

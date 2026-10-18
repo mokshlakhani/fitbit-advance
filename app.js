@@ -1232,8 +1232,8 @@ function modeSwitch() {
 // A portrait of the person with the night's vitals pinned to the body. It comes
 // from either a personal file next to the app (portrait.webp, git-ignored; the
 // desktop dashboard and personal Android builds) or one the person made in the
-// phone app (mobile/src/portrait.js, kept on the phone). Never shown for the
-// sample person.
+// phone app (mobile/src/portrait.js, kept on the phone). A personal portrait is
+// never shown for the sample person. Without one, a faceless placeholder.
 // The box keeps one shape (width 0.852 × height); the portrait fills its
 // height and is placed by its own shape.
 const HERO_BOX = 0.852;
@@ -1241,6 +1241,12 @@ const HERO_BOX = 0.852;
 const FILE_PORTRAIT = {
   src: 'portrait.webp', aspect: 0.588, generated: false,
   spots: { brain: { x: 51.1, y: 17.3 }, throat: { x: 66.7, y: 52.3 }, chest: { x: 71, y: 82.8 }, shoulder: { x: 34.7, y: 71.6 } },
+};
+// Until someone has a portrait of their own: a faceless placeholder, by the
+// sex in their profile (the man's when it isn't set). Already cut out and toned.
+const PLACEHOLDER_PORTRAITS = {
+  male: { src: 'placeholder-man.webp', aspect: 0.566, generated: false, spots: { brain: { x: 54.7, y: 18.5 }, throat: { x: 71.5, y: 55.0 }, chest: { x: 71.2, y: 83.6 }, shoulder: { x: 29.2, y: 72.2 } } },
+  female: { src: 'placeholder-woman.webp', aspect: 0.584, generated: false, spots: { brain: { x: 48.0, y: 18.0 }, throat: { x: 69.5, y: 59.0 }, chest: { x: 69.0, y: 82.4 }, shoulder: { x: 28.5, y: 79.3 } } },
 };
 // Stress and skin temperature are Performance-only: Standard shows HRV at the
 // brain (the nervous system's recovery signal) and leaves the shoulder out.
@@ -1307,9 +1313,11 @@ function portraitNudge() {
 }
 
 function homePortrait(d) {
-  const pic = state.hostPortrait || state.filePortrait;
-  if (pic && !state.demo) return portraitHero(d, pic);
-  return portraitNudge();
+  const own = state.demo ? null : state.hostPortrait || state.filePortrait;
+  if (own) return portraitHero(d, own);
+  // No portrait of their own: the placeholder, with the invitation to make one above it.
+  const placeholder = PLACEHOLDER_PORTRAITS[state.data.profile.sex === 'female' ? 'female' : 'male'];
+  return portraitNudge() + portraitHero(d, placeholder);
 }
 
 function renderHome() {

@@ -47,7 +47,7 @@
 <ul>
 <li><strong>What is sent:</strong> the photo you pick, shrunk to at most 1024 pixels and with its metadata (such as location) removed on your device, plus your current Google sign-in token.</li>
 <li><strong>Where it goes:</strong> to the developer's helper on Cloudflare Workers, which passes the photo to Google's Gemini API to check that it shows one person's face, to make a side-profile portrait in DataStrap's style, and to find where the vitals go on it. The helper returns the portrait to your device.</li>
-<li><strong>What is kept:</strong> the helper does not store or log your photo or the portrait. To limit each person to a few tries a day, it uses your sign-in token once to read your Google Health profile ID and keeps only a one-way, salted fingerprint of that ID with a count of today's tries, which is deleted after two days. Your health data is not sent.</li>
+<li><strong>What is kept:</strong> the helper does not store or log your photo or the portrait. To limit each person to three tries a week, it uses your sign-in token once to read your Google Health profile ID and keeps only a one-way, salted fingerprint of that ID with a count of this week's tries, which is deleted after eight days. Your health data is not sent.</li>
 <li><strong>Google:</strong> the developer uses Google's paid Gemini API, under which Google does not use your photo or portrait to improve its products. Google may keep them for a limited time to detect abuse, as its <a href="https://ai.google.dev/gemini-api/terms" rel="noopener">Gemini API terms</a> describe.</li>
 <li><strong>On your device:</strong> the portrait is saved with your health data. Remove it any time from the ↻ sheet (Today portrait → Remove), or by clearing the app's data.</li>
 </ul>

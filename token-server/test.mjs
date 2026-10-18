@@ -1,5 +1,6 @@
 // Checks the Worker's rules with Google's token endpoint stubbed out.
 import worker from './src/index.js';
+import { portraitPrompt } from './src/portrait.js';
 const SEAL_KEY = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64');
 const base = { GOOGLE_CLIENT_ID: 'cid', GOOGLE_CLIENT_SECRET: 'sec', ALLOWED_ORIGINS: 'https://app.example' };
 let env = { ...base };
@@ -84,7 +85,7 @@ check('new SEAL_KEY signs everyone out', (await call('/refresh', { refresh_token
 env = { ...base };
 // ---------- /portrait, with Google Health and Gemini stubbed ----------
 const kv = new Map();
-const penv = { ...env, GEMINI_API_KEY: 'gk', PORTRAIT_SALT: 'salt', PORTRAIT_DAILY_LIMIT: '2',
+const penv = { ...env, GEMINI_API_KEY: 'gk', PORTRAIT_SALT: 'salt', PORTRAIT_WEEKLY_LIMIT: '2',
   PORTRAIT_LIMITS: { get: async k => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, v); } } };
 let stub = {};
 const calls = [];
@@ -101,6 +102,7 @@ globalThis.fetch = async (url, init = {}) => {
   if (text.startsWith('Look at this photo')) return ok(stub.check ?? { candidates: [{ content: { parts: [{ text: '{"one_person":true,"face_visible":true}' }] } }] });
   if (text.startsWith('Using the person')) {
     stub.genConfig = body.generationConfig;
+    (stub.prompts ||= []).push(text);
     return ok(stub.gen ?? { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: 'UE5H' } }] } }] });
   }
   return ok(stub.pins ?? { candidates: [{ content: { parts: [{ text: '{"brain":{"x":450,"y":200},"throat":{"x":600,"y":540},"chest":{"x":640,"y":800},"shoulder":{"x":330,"y":730}}' }] } }] });
@@ -114,7 +116,10 @@ check('portrait: bad Google token refused', (await pcall({ image: 'QUJD' }, 'bad
 check('portrait: missing image refused', (await pcall({})).status === 400);
 r = await pcall({ image: 'QUJD' }); b = await r.json();
 check('portrait: returns image, pins and tries left', r.status === 200 && b.image === 'UE5H' && b.mime === 'image/png' && b.pins.brain.x === 45 && b.pins.throat.y === 54 && b.remaining === 1);
-check('portrait: asks for an image, 3:4', stub.genConfig.responseModalities[0] === 'IMAGE' && stub.genConfig.imageConfig.aspectRatio === '3:4');
+check('portrait: asks for a square image', stub.genConfig.responseModalities[0] === 'IMAGE' && stub.genConfig.imageConfig.aspectRatio === '1:1');
+check('portrait: no sex set gets the collarbone crop', /below the collarbones/.test(stub.prompts.at(-1)) && !/Bare-chested/.test(stub.prompts.at(-1)));
+check('portrait: men bare-chested, women cropped at the collarbones', /Bare-chested/.test(portraitPrompt('male'))
+  && /below the collarbones/.test(portraitPrompt('female')) && !/Bare-chested/.test(portraitPrompt('female')));
 check('portrait: key never echoed', !JSON.stringify(b).includes('gk'));
 check('portrait: only a salted hash is stored', [...kv.keys()].every(k => /^p:[0-9a-f]{64}$/.test(k) && !k.includes('123')));
 stub.check = { candidates: [{ content: { parts: [{ text: '{"one_person":false,"face_visible":true}' }] } }] };
@@ -124,7 +129,7 @@ stub = { pins: { candidates: [{ content: { parts: [{ text: 'not json' }] } }] } 
 r = await pcall({ image: 'QUJD' }); b = await r.json();
 check('portrait: pins fall back to defaults', r.status === 200 && b.pins.chest.x === 64 && b.remaining === 0);
 r = await pcall({ image: 'QUJD' }); b = await r.json();
-check('portrait: daily limit', r.status === 429 && b.error === 'daily_limit');
+check('portrait: weekly limit, with the reset date', r.status === 429 && b.error === 'weekly_limit' && /^\d{4}-\d\d-\d\d$/.test(b.resets));
 kv.clear();
 stub = { pins: { candidates: [{ content: { parts: [{ text: '{"brain":{"x":515,"y":255},"throat":{"x":624,"y":558},"chest":{"x":393,"y":807},"shoulder":{"x":260,"y":623}}' }] } }] } };
 r = await pcall({ image: 'QUJD' }); b = await r.json();

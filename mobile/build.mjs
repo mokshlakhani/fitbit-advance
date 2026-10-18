@@ -23,7 +23,7 @@ const MODULES = ['engine.js', 'ingest.js', 'store.js', 'google.js', 'webauth.js'
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'm'), { recursive: true });
-for (const f of ['styles.css', 'icons.js', 'app.js']) cpSync(join(root, f), join(out, f));
+for (const f of ['styles.css', 'icons.js', 'app.js', 'placeholder-man.webp', 'placeholder-woman.webp']) cpSync(join(root, f), join(out, f));
 for (const f of MODULES) cpSync(join(here, 'src', f), join(out, 'm', f));
 // Takeout import (VO₂ max, only loaded when used) needs its unzip library (MIT).
 cpSync(join(here, 'node_modules', 'fflate', 'esm', 'browser.js'), join(out, 'm', 'fflate.js'));

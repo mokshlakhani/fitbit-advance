@@ -20,7 +20,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
        "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; "
        "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
-PUBLIC = {'/index.html', '/styles.css', '/app.js', '/icons.js', '/dashboard_data.json', '/demo_data.json', '/portrait.webp'}
+PUBLIC = {'/index.html', '/styles.css', '/app.js', '/icons.js', '/dashboard_data.json', '/demo_data.json', '/portrait.webp',
+          '/placeholder-man.webp', '/placeholder-woman.webp'}
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
