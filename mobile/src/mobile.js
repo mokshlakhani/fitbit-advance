@@ -7,6 +7,7 @@ import { sync, loadRaw, dashboardProfile, logWorkout as logWorkoutApi, updateWor
 import { loadApiSources, mergeSources, loadWorkoutSamples, workoutUtcDays, localDayReadings } from './ingest.js';
 import { assemble } from './engine.js';
 import * as webauth from './webauth.js';
+import { loadPortrait, savePortrait, removePortrait, toDashboard, preparePhoto, requestPortrait } from './portrait.js';
 
 const FIRST_SYNC_DAYS = 90;
 const FIRST_SYNC_DAYS_WITH_SEED = 30;
@@ -398,7 +399,68 @@ async function renderSheetStatus() {
   if (live) live.innerHTML = await sheetStatusHtml();
 }
 
-let sheetMode = 'all'; // 'feedback' when opened from the feedback button
+// ---------- Today portrait ----------
+// Made by Google Gemini through DataStrap's helper from a photo the person
+// picks; kept on this device only (portrait.js, token-server/src/portrait.js).
+let portraitServer = '';
+let portraitSignedIn = false;
+let pendingPortrait = null; // made but not yet chosen ("Use this")
+
+async function portraitAvailable() {
+  portraitServer = (await appConfig()).portraitServer || '';
+  portraitSignedIn = Boolean(await store.get('signedIn'));
+  return Boolean(portraitServer && portraitSignedIn);
+}
+
+async function showStoredPortrait() {
+  const p = await loadPortrait();
+  window.DataStrap?.setPortrait?.(p ? toDashboard(p) : null);
+}
+
+async function portraitSectionHtml() {
+  if (!(await portraitAvailable())) return '';
+  const has = await loadPortrait();
+  return `<h2 class="m-title">Today portrait</h2>
+    <p class="m-note">${has ? 'Your portrait is on Today, with your vitals pinned to it. It’s kept only on this phone.' : 'Put a portrait of yourself on Today, with your vitals pinned to it, made from a photo you choose.'}</p>
+    <div class="m-pair">
+      <button class="m-btn" data-act="portrait">${has ? 'Make a new one' : 'Make my portrait'}</button>
+      ${has ? '<button class="m-btn" data-act="portrait-remove">Remove</button>' : ''}
+    </div>`;
+}
+
+function portraitSheetHtml() {
+  const p = pendingPortrait;
+  return `<h2 class="m-title">Your Today portrait</h2>
+    <p class="m-note">Choose a clear photo of just you, facing the camera. DataStrap sends it once to Google’s Gemini, through DataStrap’s helper, which keeps nothing, to make a side-profile studio portrait in the app’s style. The portrait is saved only on this phone. You get 3 tries a day.</p>
+    ${p ? `<div class="m-portrait-preview"><img src="data:${p.mime};base64,${p.data}" alt="Your new portrait"></div>
+      <div class="m-pair"><button class="m-btn primary" data-act="portrait-use">Use this</button><button class="m-btn" data-act="portrait-retry">Try another photo</button></div>`
+    : `<label class="m-check"><input type="checkbox" data-field="portraitConsent"><span>This is a photo of me, and I agree to it being sent to Google Gemini to make my portrait.</span></label>
+      <label class="m-btn primary m-file m-portrait-pick" aria-disabled="true">Choose a photo<input type="file" accept="image/*" data-field="portraitPhoto" hidden disabled></label>`}
+    <p class="m-note m-portrait-status" role="status" aria-live="polite"></p>`;
+}
+
+async function makePortrait(file) {
+  const sheet = document.getElementById('syncSheet');
+  const status = sheet.querySelector('.m-portrait-status');
+  const pick = sheet.querySelector('.m-portrait-pick');
+  const busy = on => { pick?.setAttribute('aria-disabled', String(on)); const input = pick?.querySelector('input'); if (input) input.disabled = on; };
+  busy(true);
+  status.innerHTML = '<span class="m-status"><span class="m-spin"></span>Making your portrait. This takes about 20 seconds.</span>';
+  let image;
+  try { image = await preparePhoto(file); } catch (err) { status.textContent = err.message; busy(false); return; }
+  const res = await requestPortrait(portraitServer, getToken, image);
+  if (res.error) {
+    status.textContent = `${res.error}${Number.isFinite(res.remaining) ? ` (${res.remaining} ${res.remaining === 1 ? 'try' : 'tries'} left today)` : ''}`;
+    busy(false);
+    return;
+  }
+  pendingPortrait = res.portrait;
+  renderSheet('portrait');
+  const note = document.querySelector('#syncSheet .m-portrait-status');
+  if (note && Number.isFinite(res.remaining)) note.textContent = `${res.remaining} ${res.remaining === 1 ? 'try' : 'tries'} left today.`;
+}
+
+let sheetMode = 'all'; // 'feedback' when opened from the feedback button; 'portrait' for the portrait
 async function renderSheet(mode = sheetMode) {
   const sheet = document.getElementById('syncSheet');
   const [signedIn, lab, prof, vo2, tempUnit] = [
@@ -407,6 +469,10 @@ async function renderSheet(mode = sheetMode) {
   ];
   const date = viewedDate();
   const sexOpt = (v, label) => `<option value="${v}" ${(prof.sex || '') === v ? 'selected' : ''}>${label}</option>`;
+  if (mode === 'portrait') {
+    sheet.querySelector('.m-body').innerHTML = portraitSheetHtml();
+    return;
+  }
   if (mode === 'feedback') {
     sheet.querySelector('.m-body').innerHTML = await feedbackHtml();
     sheet.querySelector('#feedbackMessage')?.focus({ preventScroll: true });
@@ -451,6 +517,8 @@ async function renderSheet(mode = sheetMode) {
     <p class="m-note">Google’s API doesn’t include VO₂ max. Import it from a Google Takeout export (takeout.google.com → Fitbit). Choose the downloaded .zip; only the VO₂ max files are read, and nothing is uploaded.</p>
     <label class="m-btn m-file">Import from Takeout<input type="file" accept=".zip,.json,application/zip,application/json" multiple data-field="takeout" hidden></label>
     <p class="m-note">${Object.keys(vo2).length ? `${Object.keys(vo2).length} days of VO₂ max imported.` : 'None imported yet.'}</p>
+
+    ${await portraitSectionHtml()}
 
     ${await feedbackHtml()}
 
@@ -522,6 +590,18 @@ function mountUi() {
     if (act === 'sync') runSync({ manual: true });
     if (act === 'signin') signIn();
     if (act === 'signout') signOut();
+    if (act === 'portrait' || act === 'portrait-retry') { pendingPortrait = null; sheetMode = 'portrait'; renderSheet('portrait'); }
+    if (act === 'portrait-use' && pendingPortrait) {
+      const p = pendingPortrait;
+      pendingPortrait = null;
+      savePortrait(p).then(showStoredPortrait);
+      closeSheet();
+      window.DataStrap?.toast?.('Your portrait is on Today.');
+    }
+    if (act === 'portrait-remove') {
+      removePortrait().then(showStoredPortrait);
+      renderSheet('all');
+    }
   });
   sheet.addEventListener('change', async e => {
     const field = e.target.dataset?.field;
@@ -537,6 +617,12 @@ function mountUi() {
       renderSheet();
     }
     if (field === 'takeout' && e.target.files.length) await importTakeoutFiles([...e.target.files]);
+    if (field === 'portraitConsent') {
+      const pick = sheet.querySelector('.m-portrait-pick');
+      pick.setAttribute('aria-disabled', String(!e.target.checked));
+      pick.querySelector('input').disabled = !e.target.checked;
+    }
+    if (field === 'portraitPhoto' && e.target.files.length) await makePortrait(e.target.files[0]);
   });
   sheet.addEventListener('submit', async e => {
     e.preventDefault();
@@ -756,6 +842,9 @@ window.DataStrapHost = {
   logWorkout: entry => runWrite({ kind: 'log', entry }),
   updateWorkout: (id, entry) => runWrite({ kind: 'update', id, entry }),
   deleteWorkout: id => runWrite({ kind: 'delete', id }),
+  // The Today portrait: can this app make one, and open its sheet.
+  canPortrait: () => Boolean(portraitServer && portraitSignedIn),
+  openPortrait: () => openSheet('portrait'),
   async load() {
     mountUi();
     pullToRefresh();
@@ -785,6 +874,8 @@ window.DataStrapHost = {
     }
     if (signedIn) setTimeout(askSexOnce, 800);
     if (signedIn && !NATIVE) setTimeout(resumePendingWrite, 600);
+    await portraitAvailable();
+    await showStoredPortrait();
     return data;
   },
 };

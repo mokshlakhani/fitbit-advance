@@ -6,9 +6,23 @@ workers_dev = true
 [vars]
 # The web app's Google client ID (public) and its addresses.
 GOOGLE_CLIENT_ID = "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleusercontent.com"
-ALLOWED_ORIGINS = "https://mokshlakhani.github.io,http://localhost:8092"
+ALLOWED_ORIGINS = "https://mokshlakhani.github.io,http://localhost:8092,https://localhost"
+# Today portrait (POST /portrait): Gemini models and tries per person per day.
+GEMINI_IMAGE_MODEL = "gemini-nano-banana-2.1"
+GEMINI_CHECK_MODEL = "gemini-3.5-flash-lite"
+PORTRAIT_DAILY_LIMIT = "3"
 
 # The client secret is NOT here. Set it once with:
 #   npx wrangler secret put GOOGLE_CLIENT_SECRET
+#
+# The portrait needs three more things (until then /portrait answers
+# "not_configured" and everything else works as before):
+#   npx wrangler secret put GEMINI_API_KEY      (a paid-tier Gemini API key)
+#   npx wrangler secret put PORTRAIT_SALT       (any long random string)
+#   npx wrangler kv namespace create PORTRAIT_LIMITS
+# then paste the id it prints into a block like this and deploy:
+#   [[kv_namespaces]]
+#   binding = "PORTRAIT_LIMITS"
+#   id = "<the id>"
 [observability]
 enabled = false

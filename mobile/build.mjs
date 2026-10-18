@@ -19,7 +19,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const WEB = process.argv.includes('--web');
 const out = join(here, WEB ? 'web' : 'www');
-const MODULES = ['engine.js', 'ingest.js', 'store.js', 'google.js', 'webauth.js', 'mobile.js', 'mobile.css', 'takeout.js'];
+const MODULES = ['engine.js', 'ingest.js', 'store.js', 'google.js', 'webauth.js', 'mobile.js', 'mobile.css', 'takeout.js', 'portrait.js'];
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'm'), { recursive: true });
@@ -39,6 +39,8 @@ const appConfig = {
   feedback: fileConfig.feedback || null,
   // Sign-in helper (token-server/) for long-lasting web sign-in; optional.
   tokenServer: WEB ? (fileConfig.tokenServer || null) : null,
+  // Same helper, both builds: makes the optional Today portrait (POST /portrait).
+  portraitServer: fileConfig.portraitServer || fileConfig.tokenServer || null,
 };
 
 if (WEB) {

@@ -1229,16 +1229,18 @@ function modeSwitch() {
 }
 
 // ---------- Portrait hero (Today) ----------
-// A personal portrait (portrait.webp, git-ignored, never in the repo or the
-// public web app) with the night's vitals pinned to the body. Shown only when
-// that file exists and the data isn't the sample person's.
-// x / y: the point on the portrait, in % of the image. card: which corner the
-// vital's text sits in and its top (% of the box); end: where the leader meets it.
-const HERO_SPOTS = {
-  brain: { x: 51.1, y: 17.3, card: 'tl', top: 1, end: [25, 15.5] },
-  throat: { x: 66.7, y: 52.3, card: 'tr', top: 49, end: [70, 55] },
-  chest: { x: 71, y: 82.8, card: 'tr', top: 75, end: [70, 81] },
-  shoulder: { x: 34.7, y: 71.6, card: 'tl', top: 80, end: [17, 80] },
+// A portrait of the person with the night's vitals pinned to the body. It comes
+// from either a personal file next to the app (portrait.webp, git-ignored; the
+// desktop dashboard and personal Android builds) or one the person made in the
+// phone app (mobile/src/portrait.js, kept on the phone). Never shown for the
+// sample person.
+// The box keeps one shape (width 0.852 × height); the portrait fills its
+// height and is placed by its own shape.
+const HERO_BOX = 0.852;
+// Where the pins go on the personal file's portrait, in % of the image.
+const FILE_PORTRAIT = {
+  src: 'portrait.webp', aspect: 0.588, generated: false,
+  spots: { brain: { x: 51.1, y: 17.3 }, throat: { x: 66.7, y: 52.3 }, chest: { x: 71, y: 82.8 }, shoulder: { x: 34.7, y: 71.6 } },
 };
 // Stress and skin temperature are Performance-only: Standard shows HRV at the
 // brain (the nervous system's recovery signal) and leaves the shoulder out.
@@ -1246,8 +1248,6 @@ const HERO_VITALS = {
   perf: [['brain', 'stress', 'Stress'], ['throat', 'spo2', 'SpO₂'], ['chest', 'rhr', 'Heart'], ['shoulder', 'temp', 'Skin temp']],
   std: [['brain', 'hrv', 'HRV'], ['throat', 'spo2', 'SpO₂'], ['chest', 'rhr', 'Heart']],
 };
-// The portrait takes 69% of the box's width from 8.4% in, at full height.
-const HERO_IMG = { left: 8.4, width: 69 };
 
 function heroStatus(key, v) {
   if (!isNum(v)) return { text: 'No data', cls: '' };
@@ -1256,14 +1256,30 @@ function heroStatus(key, v) {
   return v > r.hi ? { text: 'Above usual', cls: 'off' } : v < r.lo ? { text: 'Below usual', cls: 'off' } : { text: 'Normal', cls: 'ok' };
 }
 
-function portraitHero(d) {
+const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function portraitHero(d, pic) {
+  const width = Math.min(100, pic.aspect / HERO_BOX * 100);
+  const left = (100 - width) * 0.27;
+  // Each vital's text: brain and shoulder on the left, throat and chest on the
+  // right at their pins' height (kept apart), with a leader from pin to text.
+  const throatTop = clampTo(pic.spots.throat.y - 3.5, 30, 60);
+  const layout = {
+    brain: { card: 'tl', top: 1, end: [25, 15.5] },
+    throat: { card: 'tr', top: throatTop, end: [70, throatTop + 6] },
+    chest: { card: 'tr', top: 0, end: [70, 0] },
+    shoulder: { card: 'tl', top: 80, end: [17, 80] },
+  };
+  const chestTop = clampTo(Math.max(pic.spots.chest.y - 8, throatTop + 18), 50, 80);
+  layout.chest.top = chestTop;
+  layout.chest.end = [70, chestTop + 6];
   const spots = HERO_VITALS[state.mode].map(([spot, key, label], i) => {
-    const p = HERO_SPOTS[spot];
-    return { ...p, key, label, i, v: M[key].pick(d), px: HERO_IMG.left + HERO_IMG.width * p.x / 100 };
+    const p = pic.spots[spot];
+    return { ...layout[spot], key, label, i, v: M[key].pick(d), px: left + width * p.x / 100, y: p.y };
   });
   const lines = spots.map(s => `<path d="M${s.px},${s.y}L${s.end[0]},${s.end[1]}" pathLength="1" style="--i:${s.i}" vector-effect="non-scaling-stroke"/>`).join('');
   return `<section class="hero reveal" aria-label="Last night's vitals">
-    <img class="hero-img" src="portrait.webp" alt="" style="left:${HERO_IMG.left}%;width:${HERO_IMG.width}%">
+    <img class="hero-img ${pic.generated ? 'gen' : ''}" src="${esc(pic.src)}" alt="" style="left:${left}%;width:${width}%">
     <svg class="hero-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>
     ${spots.map(s => {
       const st = heroStatus(s.key, s.v);
@@ -1275,6 +1291,25 @@ function portraitHero(d) {
       </a>`;
     }).join('')}
   </section>`;
+}
+
+// No portrait yet, in an app that can make one: a small invitation, until
+// the person makes one or says not now.
+function portraitNudge() {
+  const host = window.DataStrapHost;
+  if (!host || !host.canPortrait || !host.canPortrait() || state.demo) return '';
+  try { if (localStorage.getItem('ds-portrait-nudge') === 'off') return ''; } catch { /* storage blocked: still show */ }
+  return `<section class="portrait-nudge reveal" aria-label="Today portrait">
+    <span class="pn-text"><b>Put yourself on Today</b><span>Make a portrait from a photo, with your vitals pinned to it.</span></span>
+    <button type="button" class="pn-go" data-portrait-open>Make it</button>
+    <button type="button" class="icon-btn pn-x" data-portrait-dismiss aria-label="Not now">${ph('x')}</button>
+  </section>`;
+}
+
+function homePortrait(d) {
+  const pic = state.hostPortrait || state.filePortrait;
+  if (pic && !state.demo) return portraitHero(d, pic);
+  return portraitNudge();
 }
 
 function renderHome() {
@@ -1292,7 +1327,7 @@ function renderHome() {
   const topRow = `<div class="home-top reveal">${modeSwitch()}</div>`;
   return `
     ${topRow}
-    ${state.portrait && !state.demo ? portraitHero(d) : ''}
+    ${homePortrait(d)}
     ${weekStrip()}
     ${dials(d)}
     ${insightCard(d)}
@@ -2748,6 +2783,12 @@ function bindEvents() {
     const modeBtn = e.target.closest('[data-set-mode]');
     if (modeBtn) { setMode(modeBtn.dataset.setMode); return; }
     if (e.target.closest('[data-log-open]')) { openLogSheet(); return; }
+    if (e.target.closest('[data-portrait-open]')) { window.DataStrapHost?.openPortrait?.(); return; }
+    if (e.target.closest('[data-portrait-dismiss]')) {
+      try { localStorage.setItem('ds-portrait-nudge', 'off'); } catch { /* fine: it shows again next time */ }
+      render();
+      return;
+    }
     if (e.target.closest('[data-edit-workout]') && state.route.page === 'workout') {
       openLogSheet({ w: day().strain.workouts[state.route.index], iso: day().date });
       return;
@@ -2851,6 +2892,11 @@ function showData(data, { demo = false } = {}) {
 // through window.DataStrapHost instead of dashboard_data.json.
 window.DataStrap = {
   toast,
+  // A portrait made in the phone app ({src, spots, aspect, generated}), or null.
+  setPortrait(p) {
+    state.hostPortrait = p || null;
+    if (state.data && state.route.page === 'home') render();
+  },
   setMode: m => setMode(m),
   getMode: () => state.mode,
   refresh(data) {
@@ -2863,13 +2909,13 @@ window.DataStrap = {
   },
 };
 
-// The portrait hero appears once portrait.webp loads (only personal builds have it).
+// The personal portrait file appears once it loads (only personal builds have it).
 const portraitProbe = new Image();
 portraitProbe.onload = () => {
-  state.portrait = true;
+  state.filePortrait = FILE_PORTRAIT;
   if (state.data && state.route.page === 'home') render();
 };
-portraitProbe.src = 'portrait.webp';
+portraitProbe.src = FILE_PORTRAIT.src;
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (window.DataStrapHost) {

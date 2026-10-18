@@ -5,15 +5,20 @@
 // and does exactly two things for the web app:
 //   POST /token    {code, code_verifier, redirect_uri}  -> access + refresh token
 //   POST /refresh  {refresh_token}                      -> new access token
-// It stores nothing and logs nothing, never sees health data, and only
-// answers the web app's own addresses (ALLOWED_ORIGINS).
+// It also makes the optional Today portrait (src/portrait.js):
+//   POST /portrait {image}                              -> side-profile portrait
+// It stores and logs no photos or health data (only a per-day count of
+// portrait tries, under a salted hash), and only answers the app's own
+// addresses (ALLOWED_ORIGINS).
+import { portrait } from './portrait.js';
+
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 
 function cors(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
@@ -31,11 +36,12 @@ export default {
     if (!allowed.includes(origin)) return new Response('Forbidden', { status: 403 });
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(origin) });
     if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, origin);
+    const path = new URL(request.url).pathname;
+    if (path === '/portrait') return portrait(request, env, (b, status) => json(b, status, origin));
     if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return json({ error: 'not_configured' }, 500, origin);
 
     let body;
     try { body = await request.json(); } catch { return json({ error: 'bad_request' }, 400, origin); }
-    const path = new URL(request.url).pathname;
     const form = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET });
 
     if (path === '/token') {
