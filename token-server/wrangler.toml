@@ -24,5 +24,10 @@ PORTRAIT_DAILY_LIMIT = "3"
 #   [[kv_namespaces]]
 #   binding = "PORTRAIT_LIMITS"
 #   id = "<the id>"
+# Counts of today's portrait tries (salted hashes, 2-day expiry).
+[[kv_namespaces]]
+binding = "PORTRAIT_LIMITS"
+id = "1df854431505481ea37978849f218d0a"
+
 [observability]
 enabled = false
