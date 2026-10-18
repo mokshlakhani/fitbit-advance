@@ -13,10 +13,10 @@ ALLOWED_REDIRECTS = "https://mokshlakhani.github.io/fitbit-advance/,http://local
 # "true" once everyone runs an app version with bound sign-in: plain refresh
 # tokens from older versions are then refused and those people sign in again.
 REQUIRE_BOUND = "false"
-# Today portrait (POST /portrait): Gemini models and tries per person per day.
+# Today portrait (POST /portrait): Gemini models and tries per person per week.
 GEMINI_IMAGE_MODEL = "gemini-nano-banana-2.1"
 GEMINI_CHECK_MODEL = "gemini-3.5-flash-lite"
-PORTRAIT_DAILY_LIMIT = "3"
+PORTRAIT_WEEKLY_LIMIT = "3"
 
 # The client secret and the sealing key are NOT here. Set them once with:
 #   npx wrangler secret put GOOGLE_CLIENT_SECRET
@@ -27,7 +27,7 @@ PORTRAIT_DAILY_LIMIT = "3"
 #   npx wrangler secret put PORTRAIT_SALT       (any long random string)
 # and the KV namespace below (npx wrangler kv namespace create PORTRAIT_LIMITS).
 
-# Counts of today's portrait tries (salted hashes, 2-day expiry).
+# Counts of this week's portrait tries (salted hashes, 8-day expiry).
 [[kv_namespaces]]
 binding = "PORTRAIT_LIMITS"
 id = "1df854431505481ea37978849f218d0a"

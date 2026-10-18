@@ -47,7 +47,7 @@ export async function preparePhoto(file) {
 }
 
 const MESSAGES = {
-  daily_limit: n => `You’ve used today’s ${n} tries. Try again tomorrow.`,
+  weekly_limit: (n, resets) => `You’ve used this week’s ${n} tries. You can make a new portrait from ${new Date(`${resets}T00:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}.`,
   one_person: 'Use a photo with just you in it.',
   face: 'Your face needs to be clearly visible and facing the camera.',
   unclear: 'That photo didn’t work. Try a clearer one of just you, facing the camera.',
@@ -86,7 +86,7 @@ export async function requestPortrait(server, getToken, image) {
   }
   const m = MESSAGES[body.reason] || MESSAGES[body.error];
   return {
-    error: typeof m === 'function' ? m(body.limit) : m || 'Couldn’t make the portrait right now. Try again in a minute.',
+    error: typeof m === 'function' ? m(body.limit, body.resets) : m || 'Couldn’t make the portrait right now. Try again in a minute.',
     remaining: body.remaining,
   };
 }

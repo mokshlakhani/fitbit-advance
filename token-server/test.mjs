@@ -80,7 +80,7 @@ check('new SEAL_KEY signs everyone out', (await call('/refresh', { refresh_token
 env = { ...base };
 // ---------- /portrait, with Google Health and Gemini stubbed ----------
 const kv = new Map();
-const penv = { ...env, GEMINI_API_KEY: 'gk', PORTRAIT_SALT: 'salt', PORTRAIT_DAILY_LIMIT: '2',
+const penv = { ...env, GEMINI_API_KEY: 'gk', PORTRAIT_SALT: 'salt', PORTRAIT_WEEKLY_LIMIT: '2',
   PORTRAIT_LIMITS: { get: async k => kv.get(k) ?? null, put: async (k, v) => { kv.set(k, v); } } };
 let stub = {};
 const calls = [];
@@ -120,7 +120,7 @@ stub = { pins: { candidates: [{ content: { parts: [{ text: 'not json' }] } }] } 
 r = await pcall({ image: 'QUJD' }); b = await r.json();
 check('portrait: pins fall back to defaults', r.status === 200 && b.pins.chest.x === 64 && b.remaining === 0);
 r = await pcall({ image: 'QUJD' }); b = await r.json();
-check('portrait: daily limit', r.status === 429 && b.error === 'daily_limit');
+check('portrait: weekly limit, with the reset date', r.status === 429 && b.error === 'weekly_limit' && /^\d{4}-\d\d-\d\d$/.test(b.resets));
 kv.clear();
 stub = { pins: { candidates: [{ content: { parts: [{ text: '{"brain":{"x":515,"y":255},"throat":{"x":624,"y":558},"chest":{"x":393,"y":807},"shoulder":{"x":260,"y":623}}' }] } }] } };
 r = await pcall({ image: 'QUJD' }); b = await r.json();

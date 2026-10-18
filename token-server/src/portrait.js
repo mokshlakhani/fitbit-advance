@@ -8,7 +8,7 @@
 // Steps, all in one request:
 //   1. The caller's Google token must open their Google Health profile. That
 //      proves they're a signed-in DataStrap user and gives a stable ID for the
-//      daily limit (only a salted hash of it is kept, for two days, as a count).
+//      weekly limit (only a salted hash of it is kept, for eight days, as a count).
 //   2. A quick check (a cheap vision model) that the photo shows exactly one
 //      person with their face clearly visible. Rejected photos don't use a try.
 //   3. The portrait itself (an image model), from the fixed prompt below.
@@ -45,6 +45,8 @@ const PINS_PROMPT = [
 ].join('\n');
 
 const POINT = { type: 'OBJECT', properties: { x: { type: 'NUMBER' }, y: { type: 'NUMBER' } }, required: ['x', 'y'] };
+
+const addDaysIso = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 
 async function sha256(text) {
   const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
@@ -113,11 +115,14 @@ export async function portrait(request, env, json) {
   const who = (await prof.json().catch(() => ({}))).name;
   if (!prof.ok || !who) return json({ error: 'google_error' }, 502);
 
-  const limit = Number(env.PORTRAIT_DAILY_LIMIT) || 3;
-  const day = new Date().toISOString().slice(0, 10);
-  const key = `p:${await sha256(`${env.PORTRAIT_SALT}:${who}:${day}`)}`;
+  // Tries per person per week (weeks start on Monday, UTC).
+  const limit = Number(env.PORTRAIT_WEEKLY_LIMIT) || 3;
+  const now = new Date();
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (now.getUTCDay() + 6) % 7));
+  const week = monday.toISOString().slice(0, 10);
+  const key = `p:${await sha256(`${env.PORTRAIT_SALT}:${who}:${week}`)}`;
   const used = Number(await env.PORTRAIT_LIMITS.get(key)) || 0;
-  if (used >= limit) return json({ error: 'daily_limit', limit }, 429);
+  if (used >= limit) return json({ error: 'weekly_limit', limit, resets: addDaysIso(week, 7) }, 429);
 
   const photo = { inlineData: { mimeType: 'image/jpeg', data: image } };
   const checkModel = env.GEMINI_CHECK_MODEL || 'gemini-3.5-flash-lite';
@@ -133,7 +138,7 @@ export async function portrait(request, env, json) {
     if (!verdict.face_visible) return json({ error: 'photo_rejected', reason: 'face' }, 422);
 
     // Counts as a try from here on, whatever happens next.
-    await env.PORTRAIT_LIMITS.put(key, String(used + 1), { expirationTtl: 2 * 86400 });
+    await env.PORTRAIT_LIMITS.put(key, String(used + 1), { expirationTtl: 8 * 86400 });
 
     // 3. The portrait.
     const made = await gemini(env, env.GEMINI_IMAGE_MODEL || 'gemini-nano-banana-2.1', [photo, { text: PORTRAIT_PROMPT }], {
