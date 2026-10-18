@@ -35,12 +35,13 @@ export const PORTRAIT_PROMPT = [
 const CHECK_PROMPT = 'Look at this photo. Does it show exactly one real person (not a drawing, statue or screen), with their face clearly visible and roughly facing the camera? Answer in JSON.';
 
 const PINS_PROMPT = [
-  'This is a side-profile portrait of one person facing right.',
-  'Give the position of each of these points on the image, as x and y from 0 to 1000 (x from the left edge, y from the top edge):',
-  'brain: the middle of the head, a little above and in front of the ear;',
-  'throat: the front of the neck, just below the chin;',
-  'chest: the upper chest on the side nearest the viewer, over the heart, below the collarbone;',
-  'shoulder: the top of the shoulder nearest the viewer.',
+  'This is a side-profile portrait of one person facing right, wearing a T-shirt.',
+  'Give the position of each of these points on the image, as x and y from 0 to 1000 (x from the left edge, y from the top edge).',
+  'Every point must be on the person, inside their outline, never on the edge of the body or on the background:',
+  'brain: the centre of the skull, directly above the ear and halfway between the ear and the top of the head;',
+  'throat: the front of the neck, just below the chin and in front of the neck’s centre;',
+  'chest: the front of the chest over the heart, below the collarbone and in front of the arm, roughly level with the armpit;',
+  'shoulder: the rounded top of the upper arm (the deltoid), on the shoulder itself and a little below its outline.',
 ].join('\n');
 
 const POINT = { type: 'OBJECT', properties: { x: { type: 'NUMBER' }, y: { type: 'NUMBER' } }, required: ['x', 'y'] };
@@ -84,6 +85,10 @@ function cleanPins(raw) {
     const ok = p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1000 && p.y >= 0 && p.y <= 1000;
     out[k] = ok ? { x: Math.round(p.x) / 10, y: Math.round(p.y) / 10 } : d;
   }
+  // The chest is below and in front of the throat; the model sometimes picks
+  // the upper arm instead. Then place it from the throat.
+  const { throat, chest } = out;
+  if (chest.y < throat.y + 12 || chest.x < throat.x - 12) out.chest = { x: Math.round((throat.x - 4) * 10) / 10, y: Math.min(92, Math.round((throat.y + 25) * 10) / 10) };
   return out;
 }
 

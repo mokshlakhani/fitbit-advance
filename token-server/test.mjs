@@ -63,6 +63,10 @@ check('portrait: pins fall back to defaults', r.status === 200 && b.pins.chest.x
 r = await pcall({ image: 'QUJD' }); b = await r.json();
 check('portrait: daily limit', r.status === 429 && b.error === 'daily_limit');
 kv.clear();
+stub = { pins: { candidates: [{ content: { parts: [{ text: '{"brain":{"x":515,"y":255},"throat":{"x":624,"y":558},"chest":{"x":393,"y":807},"shoulder":{"x":260,"y":623}}' }] } }] } };
+r = await pcall({ image: 'QUJD' }); b = await r.json();
+check('portrait: a chest pin on the arm moves under the throat', b.pins.chest.x === 58.4 && b.pins.chest.y === 80.8);
+kv.clear();
 stub = { gen: { candidates: [{ finishReason: 'IMAGE_SAFETY', content: { parts: [] } }] } };
 r = await pcall({ image: 'QUJD' }); b = await r.json();
 check('portrait: safety block reported', r.status === 422 && b.error === 'portrait_blocked');
