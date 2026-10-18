@@ -7,8 +7,15 @@ workers_dev = true
 # The web app's Google client ID (public) and its addresses.
 GOOGLE_CLIENT_ID = "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleusercontent.com"
 ALLOWED_ORIGINS = "https://mokshlakhani.github.io,http://localhost:8092"
+# The exact sign-in pages Google sends people back to (as registered in Google Cloud).
+ALLOWED_REDIRECTS = "https://mokshlakhani.github.io/fitbit-advance/,http://localhost:8092/"
+# "true" once everyone runs an app version with bound sign-in: plain refresh
+# tokens from older versions are then refused and those people sign in again.
+REQUIRE_BOUND = "false"
 
-# The client secret is NOT here. Set it once with:
+# The client secret and the sealing key are NOT here. Set them once with:
 #   npx wrangler secret put GOOGLE_CLIENT_SECRET
+#   openssl rand -base64 32 | npx wrangler secret put SEAL_KEY
+# (A new SEAL_KEY signs every web app user out.)
 [observability]
 enabled = false

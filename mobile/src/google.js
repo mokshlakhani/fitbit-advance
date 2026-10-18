@@ -63,7 +63,10 @@ class Api {
         await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
         continue;
       }
-      const err = new Error(`${path.split('?')[0]}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+      // Only Google's error code goes in the message (it can end up in a
+      // report); the free text could repeat part of the request.
+      const reason = await res.json().then(b => b?.error?.status || '').catch(() => '');
+      const err = new Error(`${path.split('?')[0]}: ${res.status}${reason ? ` ${reason}` : ''}`);
       err.status = res.status;
       throw err;
     }

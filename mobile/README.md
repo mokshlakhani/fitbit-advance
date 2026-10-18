@@ -82,6 +82,8 @@ On Android, Chrome offers **Install app** from its menu.
 
 The web app uses Google's browser sign-in (redirect, no popup). Google gives browser apps tokens that last an hour and no long-lived refresh token. When a token runs out, the app sends you to Google and straight back with no screen, which shows as a brief reload.
 
+With the sign-in helper (`token-server/`, `tokenServer` in `web.config.json`) the app gets a refresh token instead and renews in the background. The helper hands it over encrypted and bound to a signing key the browser can't export, so a copy of the stored token is useless elsewhere. Tokens are kept in IndexedDB only, never localStorage. Without a helper, sign-in is refused unless `web.config.json` sets `"allowImplicitFlow": true` (the access token then arrives in the page address).
+
 ### Build and publish
 
 ```bash

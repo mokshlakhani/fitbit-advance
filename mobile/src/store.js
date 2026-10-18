@@ -31,9 +31,11 @@ function tx(mode, fn) {
 
 // Small settings are also kept in localStorage. If the phone ever clears the
 // IndexedDB database (seen on some iPhones' home-screen web apps), the app
-// restores these instead of asking for sign-in and sex again.
-const MIRRORED = new Set(['signedIn', 'profile', 'sexAsked', 'tempUnit', 'webToken', 'labels']);
+// restores these instead of asking for sign-in and sex again. Sign-in tokens
+// are never copied there: localStorage is plain text on disk.
+const MIRRORED = new Set(['signedIn', 'profile', 'sexAsked', 'tempUnit', 'labels']);
 const LS = 'ds-mirror:';
+try { localStorage.removeItem(LS + 'webToken'); } catch { /* blocked */ } // copy from older versions
 const lsGet = key => { try { const v = localStorage.getItem(LS + key); return v === null ? undefined : JSON.parse(v); } catch { return undefined; } };
 const lsSet = (key, value) => { try { if (value === undefined) localStorage.removeItem(LS + key); else localStorage.setItem(LS + key, JSON.stringify(value)); } catch { /* storage full or blocked */ } };
 

@@ -177,7 +177,7 @@ async function refreshSilently() {
 // is attached to feedback and crash reports (lastError) for fixing.
 let lastError = '';
 function failed(message, detail) {
-  lastError = String(detail && detail.message ? detail.message : detail || '').slice(0, 600);
+  lastError = scrub(detail && detail.message ? detail.message : detail || '').slice(0, 600);
   if (lastError) console.warn(message, lastError);
   return message;
 }
@@ -313,6 +313,17 @@ function viewedDate() {
 }
 
 // ---------- Feedback ----------
+// Error text that leaves the phone (feedback context, crash reports) loses
+// anything that could be personal: email addresses, tokens and other long IDs,
+// and measurements (decimal numbers).
+function scrub(text) {
+  return String(text)
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '[email]')
+    .replace(/\b(ya29\.|1\/\/|ds1\.)[\w.~+/=-]+/g, '[token]')
+    .replace(/[\w-]{32,}/g, '[id]')
+    .replace(/\b\d+\.\d+\b/g, '#');
+}
+
 // Messages go to the owner's Google Form (web.config.json → feedback), so
 // friends need no account and the owner reads them in Google Forms or Sheets.
 // Only what the person types is sent, plus which app, page and version they're
@@ -365,7 +376,7 @@ async function feedbackHtml() {
   if (!(await appConfig()).feedback) return '';
   return `
     <h2 class="m-title">Send feedback</h2>
-    <p class="m-note">Found a bug or have an idea? It goes straight to the person who runs DataStrap. Only what you write here is sent, with the app version and page you’re on.</p>
+    <p class="m-note">Found a bug or have an idea? It goes straight to the person who runs DataStrap. Only what you write here is sent, with the app version, the page you’re on and the last error message (personal details removed).</p>
     <form class="m-feedback" data-form="feedback" novalidate>
       <div class="m-seg" role="radiogroup" aria-label="Kind of feedback">
         ${['Bug', 'Idea', 'Other'].map((k, i) => `<label><input type="radio" name="kind" value="${k}" ${i === 0 ? 'checked' : ''}><span>${k}</span></label>`).join('')}
@@ -738,7 +749,7 @@ async function sendReport(text) {
   const cfg = (await appConfig()).feedback;
   if (!cfg) return false;
   const body = new URLSearchParams({
-    [cfg.fields.message]: `[Crash] ${text}`.slice(0, 1800),
+    [cfg.fields.message]: `[Crash] ${scrub(text)}`.slice(0, 1800),
     [cfg.fields.contact]: '',
     [cfg.fields.context]: feedbackContext(),
   });

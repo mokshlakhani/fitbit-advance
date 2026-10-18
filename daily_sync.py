@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 
 import google_health_sync
+import private_files
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RETRY_WAITS_S = [60, 300, 900]
@@ -19,6 +20,7 @@ RETRY_WAITS_S = [60, 300, 900]
 
 def main():
     print(f'=== {datetime.now():%Y-%m-%d %H:%M:%S} ===', flush=True)
+    private_files.lock_down()
     for wait in RETRY_WAITS_S + [None]:
         try:
             google_health_sync.sync(7, interactive=False)
