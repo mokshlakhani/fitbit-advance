@@ -185,3 +185,4 @@ body { padding-bottom: env(safe-area-inset-bottom); overscroll-behavior-y: none;
 .m-portrait-preview { display: grid; place-items: center; margin: 4px 0 14px; }
 .m-portrait-preview img { width: min(70%, 280px); border-radius: var(--r-lg); border: 1px solid var(--border); }
 .m-portrait-status:empty { display: none; }
+.m-pair > :only-child { grid-column: 1 / -1; }
