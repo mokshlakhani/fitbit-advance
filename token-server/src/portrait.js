@@ -2,7 +2,7 @@
 // side-profile studio portrait with Google's Gemini API, and finds where the
 // hero's pins go on it.
 //
-//   POST /portrait  {image: <base64 JPEG>}   Authorization: Bearer <Google token>
+//   POST /portrait  {image: <base64 JPEG>, sex: 'male' | 'female' | null}   Authorization: Bearer <Google token>
 //     -> {image: <base64>, mime, pins: {brain, throat, chest, shoulder}}
 //
 // Steps, all in one request:
@@ -20,22 +20,29 @@ const HEALTH_PROFILE = 'https://health.googleapis.com/v4/users/me/profile';
 const MAX_IMAGE_CHARS = 3_000_000; // base64 of the phone's ≤1024 px JPEG, with room to spare
 
 // Everything about the look is fixed here, so every person gets the same
-// portrait style and the endpoint can't be used for anything else.
-export const PORTRAIT_PROMPT = [
-  'Using the person in the attached photo, create a photorealistic studio portrait of that exact same person.',
-  'Keep their identity exactly: the same face, facial features, face shape, skin tone, hair colour, hair texture and hairstyle, and any facial hair or glasses. Do not beautify, age or change them.',
-  'Pose: a strict side profile facing the right-hand side of the frame, head level with the chin very slightly raised, eyes gently closed, a calm and neutral expression, mouth closed.',
-  'Framing: head, neck, shoulders and upper chest, cropped at mid-chest. A little space above the head. Place the person slightly left of centre so there is clear empty space in front of the face on the right.',
-  'Clothing: a plain, close-fitting light heather-grey crew-neck T-shirt with no logos, text or pattern.',
-  'Lighting: soft, diffused studio light from the front, gentle shading that shows the shape of the face, neck and shoulders, fine natural skin texture, a subtle rim light on the hair and shoulders.',
-  'Background: a seamless, perfectly flat, pure black backdrop (#000000). Nothing else in the frame.',
-  'Style: high-end editorial portrait photography, sharp focus, natural colours. One person only. No text, no watermark, no border.',
+// portrait as the app's own (a high-key, backlit studio profile) and the
+// endpoint can't be used for anything else. Men are shown bare-chested like
+// the original; women, and anyone who hasn't set their sex, with bare shoulders
+// cropped just below the collarbones: never nudity.
+const PORTRAIT_COMMON = [
+  'Using the person in the attached photo, create a photorealistic fine-art studio portrait of that exact same person.',
+  'Keep their identity exactly: the same face, facial features, face shape, skin tone, hair colour, hair texture and hairstyle, and any facial hair or glasses. Do not beautify, slim, age or change them.',
+  'Pose: a strict side profile facing the right-hand side of the frame, as if photographed exactly from the side. Head level with the chin very slightly raised, eyes gently closed, a calm neutral expression, mouth closed, shoulders relaxed.',
+  'Lighting: high-key and backlit. A bright, evenly glowing pure white backdrop behind the person, so a soft white halo wraps around the edges of the hair, neck and shoulders. A large soft key light from the front, a little dimmer than the backdrop, lighting the face and body evenly with gentle shading. Natural warm skin tones with real skin texture, no harsh highlights, no coloured light.',
+  'Background: seamless pure white filling the whole frame, perfectly even, no gradient, no floor, no shadow on the backdrop, nothing else in the frame.',
+  'Camera: medium-format editorial portrait, 85 mm lens, sharp focus on the face, natural colour, soft and airy.',
 ].join('\n');
+const PORTRAIT_FRAMING = {
+  male: 'Framing (a square photo): the top of the hair is just below the top edge; the head takes up the top 45% of the frame, the neck the next 15%, and the shoulders and chest the bottom 40%, cropped at mid-chest, about level with the nipples. The shoulder and chest fill the lower part of the frame from the left. Bare-chested, no clothing or jewellery visible, the natural build from the photo. The person sits slightly left of centre with clear space in front of the face.',
+  other: 'Framing (a square photo): the top of the hair is just below the top edge; the head takes up the top 50% of the frame, then the whole neck and the bare shoulders, cropped just below the collarbones so nothing below the collarbones is in the frame. No clothing or jewellery visible. The person sits slightly left of centre with clear space in front of the face.',
+};
+const PORTRAIT_STYLE = 'Style: a calm, quiet, non-sexual fine-art portrait. One person only. No text, no watermark, no border.';
+export const portraitPrompt = sex => [PORTRAIT_COMMON, PORTRAIT_FRAMING[sex === 'male' ? 'male' : 'other'], PORTRAIT_STYLE].join('\n');
 
 const CHECK_PROMPT = 'Look at this photo. Does it show exactly one real person (not a drawing, statue or screen), with their face clearly visible and roughly facing the camera? Answer in JSON.';
 
 const PINS_PROMPT = [
-  'This is a side-profile portrait of one person facing right, wearing a T-shirt.',
+  'This is a side-profile portrait of one person facing right.',
   'Give the position of each of these points on the image, as x and y from 0 to 1000 (x from the left edge, y from the top edge).',
   'Every point must be on the person, inside their outline, never on the edge of the body or on the background:',
   'brain: the centre of the skull, directly above the ear and halfway between the ear and the top of the head;',
@@ -141,9 +148,9 @@ export async function portrait(request, env, json) {
     await env.PORTRAIT_LIMITS.put(key, String(used + 1), { expirationTtl: 8 * 86400 });
 
     // 3. The portrait.
-    const made = await gemini(env, env.GEMINI_IMAGE_MODEL || 'gemini-nano-banana-2.1', [photo, { text: PORTRAIT_PROMPT }], {
+    const made = await gemini(env, env.GEMINI_IMAGE_MODEL || 'gemini-nano-banana-2.1', [photo, { text: portraitPrompt(body.sex) }], {
       responseModalities: ['IMAGE'],
-      imageConfig: { aspectRatio: '3:4' },
+      imageConfig: { aspectRatio: '1:1' },
     });
     const out = partsOf(made).find(p => p.inlineData && p.inlineData.data);
     if (!out) return json({ error: blocked(made) ? 'portrait_blocked' : 'no_portrait', remaining: limit - used - 1 }, 422);

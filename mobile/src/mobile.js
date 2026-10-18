@@ -459,7 +459,7 @@ async function makePortrait(file) {
   status.innerHTML = '<span class="m-status"><span class="m-spin"></span>Making your portrait. This takes about 20 seconds.</span>';
   let image;
   try { image = await preparePhoto(file); } catch (err) { status.textContent = err.message; busy(false); return; }
-  const res = await requestPortrait(portraitServer, getToken, image);
+  const res = await requestPortrait(portraitServer, getToken, image, (await profile()).sex);
   if (res.error) {
     status.textContent = `${res.error}${Number.isFinite(res.remaining) ? ` (${res.remaining} ${res.remaining === 1 ? 'try' : 'tries'} left this week)` : ''}`;
     busy(false);
