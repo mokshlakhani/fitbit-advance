@@ -16,6 +16,10 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Only the dashboard's own scripts run, and it talks to nothing but this server.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+       "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; "
+       "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 PUBLIC = {'/index.html', '/styles.css', '/app.js', '/icons.js', '/dashboard_data.json', '/demo_data.json', '/portrait.webp'}
 
 
@@ -66,6 +70,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-cache')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
+        self.send_header('Content-Security-Policy', CSP)
         super().end_headers()
 
     def log_message(self, *args):

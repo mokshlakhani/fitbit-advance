@@ -378,6 +378,7 @@ async function feedbackHtml() {
   return `
     <h2 class="m-title">Send feedback</h2>
     <p class="m-note">Found a bug or have an idea? It goes straight to the person who runs DataStrap. Only what you write here is sent, with the app version, the page you’re on and the last error message (personal details removed).</p>
+    <details class="m-note m-sent"><summary>Exactly what’s added</summary><code>${esc(feedbackContext())}</code></details>
     <form class="m-feedback" data-form="feedback" novalidate>
       <div class="m-seg" role="radiogroup" aria-label="Kind of feedback">
         ${['Bug', 'Idea', 'Other'].map((k, i) => `<label><input type="radio" name="kind" value="${k}" ${i === 0 ? 'checked' : ''}><span>${k}</span></label>`).join('')}
@@ -831,11 +832,14 @@ async function resumePendingWrite() {
 }
 
 // Error reports from a page that failed to draw: the error text only.
+const reportMessage = text => `[Crash] ${scrub(text)}`.slice(0, 1800);
+// Exactly what sendReport sends, for the error page to show before sending.
+const previewReport = text => `${reportMessage(text)}\n\n${feedbackContext()}`;
 async function sendReport(text) {
   const cfg = (await appConfig()).feedback;
   if (!cfg) return false;
   const body = new URLSearchParams({
-    [cfg.fields.message]: `[Crash] ${scrub(text)}`.slice(0, 1800),
+    [cfg.fields.message]: reportMessage(text),
     [cfg.fields.contact]: '',
     [cfg.fields.context]: feedbackContext(),
   });
@@ -850,6 +854,7 @@ async function sendReport(text) {
 window.DataStrapHost = {
   dayHeartRate,
   sendReport,
+  previewReport,
   logWorkout: entry => runWrite({ kind: 'log', entry }),
   updateWorkout: (id, entry) => runWrite({ kind: 'update', id, entry }),
   deleteWorkout: id => runWrite({ kind: 'delete', id }),

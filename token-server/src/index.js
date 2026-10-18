@@ -74,6 +74,13 @@ async function unseal(key, token) {
   }
 }
 
+// REQUIRE_BOUND: "true", "false", or a date (YYYY-MM-DD, UTC) from which it's on.
+function boundRequired(setting, now = Date.now()) {
+  const s = String(setting || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return now >= Date.parse(`${s}T00:00:00Z`);
+  return s === 'true';
+}
+
 // The app's public signing key, reduced to what's needed to check signatures.
 function publicKey(jwk) {
   if (!jwk || jwk.kty !== 'EC' || jwk.crv !== 'P-256' || typeof jwk.x !== 'string' || typeof jwk.y !== 'string') return null;
@@ -110,7 +117,7 @@ export default {
     try { body = await request.json(); } catch { return json({ error: 'bad_request' }, 400, origin); }
     if (!body || typeof body !== 'object') return json({ error: 'bad_request' }, 400, origin);
     try { key = await sealKey(env); } catch { return json({ error: 'not_configured' }, 500, origin); }
-    const requireBound = env.REQUIRE_BOUND === 'true';
+    const requireBound = boundRequired(env.REQUIRE_BOUND);
     const form = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET });
     const appKey = publicKey(body.key);
     let bound = null; // {rt, x, y} once a sealed token checks out

@@ -4,9 +4,10 @@ Health data is stored as plain files (api_data/, dashboard_data.json, takeout/),
 so the computer's disk encryption (FileVault on a Mac) is what protects them at
 rest. This module makes sure other accounts on the computer can't read them,
 keeps the data that can be downloaded again out of Time Machine, and reports
-whether disk encryption is on.
+whether disk encryption is on, here and on Time Machine backup disks.
 """
 import os
+import plistlib
 import stat
 import subprocess
 import sys
@@ -57,3 +58,26 @@ def disk_encrypted():
     except (OSError, subprocess.SubprocessError):
         return None
     return 'FileVault is On' in out if out else None
+
+
+def unencrypted_backups():
+    """Names of connected Time Machine disks that aren't encrypted (Mac only)."""
+    if sys.platform != 'darwin':
+        return []
+    try:
+        out = subprocess.run(['tmutil', 'destinationinfo', '-X'], capture_output=True, timeout=10).stdout
+        dests = plistlib.loads(out).get('Destinations', []) if out else []
+    except Exception:
+        return []
+    names = []
+    for d in dests:
+        mount = d.get('MountPoint')
+        if not mount:
+            continue  # not connected now; can't tell
+        try:
+            info = plistlib.loads(subprocess.run(['diskutil', 'info', '-plist', mount], capture_output=True, timeout=10).stdout)
+        except Exception:
+            continue
+        if not (info.get('FileVault') or info.get('Encryption')):
+            names.append(d.get('Name') or mount)
+    return names

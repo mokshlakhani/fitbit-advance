@@ -10,9 +10,10 @@ GOOGLE_CLIENT_ID = "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleuse
 ALLOWED_ORIGINS = "https://mokshlakhani.github.io,http://localhost:8092,https://localhost"
 # The exact sign-in pages Google sends people back to (as registered in Google Cloud).
 ALLOWED_REDIRECTS = "https://mokshlakhani.github.io/fitbit-advance/,http://localhost:8092/"
-# "true" once everyone runs an app version with bound sign-in: plain refresh
-# tokens from older versions are then refused and those people sign in again.
-REQUIRE_BOUND = "false"
+# From this date (UTC; or "true"/"false"), plain refresh tokens from app
+# versions before bound sign-in (2026-10-18) are refused and those people sign
+# in again. Until then they're moved onto the bound form on their next refresh.
+REQUIRE_BOUND = "2026-11-15"
 # Today portrait (POST /portrait): Gemini models and tries per person per day.
 GEMINI_IMAGE_MODEL = "gemini-nano-banana-2.1"
 GEMINI_CHECK_MODEL = "gemini-3.5-flash-lite"

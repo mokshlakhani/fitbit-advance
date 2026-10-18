@@ -163,6 +163,9 @@ def main():
     if private_files.disk_encrypted() is False:
         print('\nNote: FileVault is off, so your health data is stored unencrypted on this disk.'
               '\nTurn it on in System Settings → Privacy & Security → FileVault.')
+    for disk in private_files.unencrypted_backups():
+        print(f'\nNote: the Time Machine disk "{disk}" isn\'t encrypted, so backups of your health data on it'
+              '\nare readable by anyone with the disk. Turn on "Encrypt backups" for it in Time Machine settings.')
     if args.schedule_only:
         schedule()
         return

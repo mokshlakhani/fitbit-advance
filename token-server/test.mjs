@@ -66,6 +66,10 @@ r = await call('/refresh', { refresh_token: 'rt', key: jwk }); b = await r.json(
 check('plain token with a key comes back sealed', r.status === 200 && b.refresh_token.startsWith('ds1.'));
 r = await call('/refresh', { refresh_token: b.refresh_token, ...(await sign(keys, '/refresh', b.refresh_token)) });
 check('migrated token works with the key', r.status === 200 && sent.refresh_token === 'rt');
+env = { ...base, SEAL_KEY, REQUIRE_BOUND: '2999-01-01' };
+check('plain token still moved before the cut-off date', (await call('/refresh', { refresh_token: 'rt', key: jwk })).status === 200);
+env = { ...base, SEAL_KEY, REQUIRE_BOUND: '2020-01-01' };
+check('plain token refused after the cut-off date', (await call('/refresh', { refresh_token: 'rt', key: jwk })).status === 400);
 env = { ...base, SEAL_KEY, REQUIRE_BOUND: 'true' };
 check('plain token refused once binding is required', (await call('/refresh', { refresh_token: 'rt' })).status === 400);
 b = await (await call('/token', { code: 'c', code_verifier: 'v', redirect_uri })).json();
