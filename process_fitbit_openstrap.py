@@ -1067,4 +1067,6 @@ def build_dataset():
     print(f"Successfully generated {out_path} with {len(output['days'])} days.")
 
 if __name__ == '__main__':
+    import private_files
+    private_files.lock_down()
     build_dataset()

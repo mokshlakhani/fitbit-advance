@@ -6,24 +6,27 @@ workers_dev = true
 [vars]
 # The web app's Google client ID (public) and its addresses.
 GOOGLE_CLIENT_ID = "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleusercontent.com"
+# https://localhost is the Android app (for the portrait; it doesn't use sign-in here).
 ALLOWED_ORIGINS = "https://mokshlakhani.github.io,http://localhost:8092,https://localhost"
+# The exact sign-in pages Google sends people back to (as registered in Google Cloud).
+ALLOWED_REDIRECTS = "https://mokshlakhani.github.io/fitbit-advance/,http://localhost:8092/"
+# "true" once everyone runs an app version with bound sign-in: plain refresh
+# tokens from older versions are then refused and those people sign in again.
+REQUIRE_BOUND = "false"
 # Today portrait (POST /portrait): Gemini models and tries per person per day.
 GEMINI_IMAGE_MODEL = "gemini-nano-banana-2.1"
 GEMINI_CHECK_MODEL = "gemini-3.5-flash-lite"
 PORTRAIT_DAILY_LIMIT = "3"
 
-# The client secret is NOT here. Set it once with:
+# The client secret and the sealing key are NOT here. Set them once with:
 #   npx wrangler secret put GOOGLE_CLIENT_SECRET
-#
-# The portrait needs three more things (until then /portrait answers
-# "not_configured" and everything else works as before):
+#   openssl rand -base64 32 | npx wrangler secret put SEAL_KEY
+# (A new SEAL_KEY signs every web app user out.)
+# The portrait also needs (until then /portrait answers "not_configured"):
 #   npx wrangler secret put GEMINI_API_KEY      (a paid-tier Gemini API key)
 #   npx wrangler secret put PORTRAIT_SALT       (any long random string)
-#   npx wrangler kv namespace create PORTRAIT_LIMITS
-# then paste the id it prints into a block like this and deploy:
-#   [[kv_namespaces]]
-#   binding = "PORTRAIT_LIMITS"
-#   id = "<the id>"
+# and the KV namespace below (npx wrangler kv namespace create PORTRAIT_LIMITS).
+
 # Counts of today's portrait tries (salted hashes, 2-day expiry).
 [[kv_namespaces]]
 binding = "PORTRAIT_LIMITS"

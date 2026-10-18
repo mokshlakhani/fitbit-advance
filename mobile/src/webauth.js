@@ -9,10 +9,15 @@
 // With a sign-in helper configured (config.json tokenServer, the Worker in
 // token-server/), it uses the authorization-code flow with PKCE instead: the
 // helper adds the client secret, so Google returns a refresh token and the
-// app renews its pass in the background without leaving the page.
+// app renews its pass in the background without leaving the page. The
+// helper hands back the refresh token sealed and bound to a signing key this
+// browser made and can't export (webKey), so a copy of the stored token is
+// useless anywhere else.
 //
-// Tokens are kept in IndexedDB; they never leave the device except to call
-// Google or the sign-in helper.
+// Tokens are kept in IndexedDB only (never localStorage); they never leave the
+// device except to call Google or the sign-in helper. Without a helper, the
+// implicit flow (token in the address) is used only if config.json sets
+// allowImplicitFlow.
 import * as store from './store.js';
 
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -34,6 +39,7 @@ async function loadConfig() {
 }
 async function clientId() { return (await loadConfig()).googleClientId || null; }
 async function tokenServer() { return (await loadConfig()).tokenServer || null; }
+const SEALED = 'ds1.';
 
 const b64url = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 async function pkce() {
@@ -50,8 +56,44 @@ async function callServer(path, body) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || `sign-in helper ${res.status}`), { status: res.status, reason: data.error });
+  if (!res.ok) throw Object.assign(new Error(data.error || `sign-in helper ${res.status}`), { status: res.status, reason: data.error, now: data.now });
   return data;
+}
+
+// This browser's signing key: the private half can't be exported, even by
+// the app itself. null where the browser can't make or store one.
+async function deviceKey() {
+  const saved = await store.get('webKey').catch(() => null);
+  if (saved && saved.privateKey) return saved;
+  try {
+    const k = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+    await store.set('webKey', k);
+    return k;
+  } catch {
+    return null;
+  }
+}
+async function publicJwk(k) {
+  const { kty, crv, x, y } = await crypto.subtle.exportKey('jwk', k.publicKey);
+  return { kty, crv, x, y };
+}
+
+// Calls the helper with proof that this browser holds the key the refresh
+// token is bound to. Retries once on the helper's clock if the phone's is off.
+async function callWithProof(path, refreshToken) {
+  const k = await deviceKey();
+  if (!k) return callServer(path, { refresh_token: refreshToken });
+  const send = async (skew = 0) => {
+    const ts = Math.floor(Date.now() / 1000) + skew;
+    const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, k.privateKey, new TextEncoder().encode(`${path}.${ts}.${refreshToken}`));
+    return callServer(path, { refresh_token: refreshToken, key: await publicJwk(k), ts, sig: b64url(sig) });
+  };
+  try {
+    return await send();
+  } catch (err) {
+    if (err.reason !== 'stale_proof' || !Number.isFinite(err.now)) throw err;
+    return send(Math.round(err.now - Date.now() / 1000));
+  }
 }
 
 function saveTokens(data, prev = {}) {
@@ -85,6 +127,9 @@ async function redirect({ silent, write = false }) {
   // on the way back from Google, which loses sessionStorage and with it the
   // returning sign-in.
   const server = await tokenServer();
+  if (!server && !(await loadConfig()).allowImplicitFlow) {
+    throw Object.assign(new Error('This copy of DataStrap has no sign-in helper set up (config.json tokenServer).'), { code: 'NO_CLIENT' });
+  }
   const codes = server ? await pkce() : null;
   localStorage.setItem('ds-oauth', JSON.stringify({ state, hash: location.hash, silent, at: Date.now(), verifier: codes && codes.verifier }));
   const q = new URLSearchParams({
@@ -128,7 +173,10 @@ export async function completeRedirect() {
     }
     try {
       const prev = (await store.get('webToken')) || {};
-      await saveTokens(await callServer('/token', { code: p.get('code'), code_verifier: verifier, redirect_uri: redirectUri() }), prev);
+      const k = await deviceKey();
+      const body = { code: p.get('code'), code_verifier: verifier, redirect_uri: redirectUri() };
+      if (k) body.key = await publicJwk(k);
+      await saveTokens(await callServer('/token', body), prev);
     } catch (err) {
       await store.set('webAuthError', String(err.reason || err.message || 'token_exchange'));
       return 'error';
@@ -162,7 +210,7 @@ export async function getToken({ refresh = false } = {}) {
   if (t && t.refresh && (await tokenServer())) {
     renewing ||= (async () => {
       try {
-        await saveTokens(await callServer('/refresh', { refresh_token: t.refresh }), t);
+        await saveTokens(await callWithProof('/refresh', t.refresh), t);
         return (await store.get('webToken')).token;
       } catch (err) {
         if (err.reason === 'invalid_grant') {
@@ -199,9 +247,12 @@ export async function hasValidToken() {
 export async function signOut() {
   const t = await store.get('webToken');
   await store.del('webToken');
-  const token = t?.refresh || t?.token;
+  // Revokes this app's access to the Google account. A sealed refresh token
+  // only the helper can open; revoking the access token also ends the sign-in.
+  const sealed = t?.refresh?.startsWith(SEALED);
+  if (sealed) callWithProof('/revoke', t.refresh).catch(() => {});
+  const token = sealed ? t.token : (t?.refresh || t?.token);
   if (token) {
-    // Revokes this app's access to the Google account.
-    fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: 'POST' }).catch(() => {});
+    fetch('https://oauth2.googleapis.com/revoke', { method: 'POST', body: new URLSearchParams({ token }) }).catch(() => {});
   }
 }

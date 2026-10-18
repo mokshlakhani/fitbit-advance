@@ -158,12 +158,18 @@ def main():
     os.chdir(HERE)
     ensure_environment(args)
     sys.path.insert(0, HERE)
+    import private_files
+    private_files.lock_down()
+    if private_files.disk_encrypted() is False:
+        print('\nNote: FileVault is off, so your health data is stored unencrypted on this disk.'
+              '\nTurn it on in System Settings → Privacy & Security → FileVault.')
     if args.schedule_only:
         schedule()
         return
     connect_and_profile()
     download(args.days)
     build()
+    private_files.lock_down()  # the new data folders
     if not args.no_schedule:
         schedule()
     if not args.no_open:

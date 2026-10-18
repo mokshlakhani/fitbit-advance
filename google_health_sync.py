@@ -80,6 +80,14 @@ def _redirect_for(client):
     return 'http://localhost:8080/callback', 'localhost', 8080, '/callback'
 
 
+def _error_status(e):
+    """Google's error code (e.g. PERMISSION_DENIED) only: the free text could repeat part of the request."""
+    try:
+        return str(json.loads(e.read().decode('utf-8'))['error'].get('status', ''))[:40]
+    except Exception:
+        return ''
+
+
 def _post(url, fields):
     req = urllib.request.Request(url, data=urllib.parse.urlencode(fields).encode(),
                                  headers={'Content-Type': 'application/x-www-form-urlencoded'})
@@ -90,12 +98,14 @@ def _post(url, fields):
 def _save_tokens(tokens, client):
     tokens['updated_at'] = datetime.now().isoformat()
     tokens['client_id'] = client['id']
-    with open(TOKEN_FILE, 'w') as fh:
+    # Created owner-only (never briefly readable by others), then swapped in whole.
+    tmp = TOKEN_FILE + '.tmp'
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    if hasattr(os, 'fchmod'):
+        os.fchmod(fd, 0o600)  # in case a stale .tmp was left with other permissions
+    with os.fdopen(fd, 'w') as fh:
         json.dump(tokens, fh, indent=2)
-    try:
-        os.chmod(TOKEN_FILE, 0o600)
-    except OSError:
-        pass
+    os.replace(tmp, TOKEN_FILE)
     return tokens
 
 
@@ -444,7 +454,7 @@ def sync(days, interactive=False, log=print):
                     civil = workout_civil_start(p)
                     return is_datastrap(p) and civil is not None and lo <= civil < hi and point_key(p) not in fresh
         except urllib.error.HTTPError as e:
-            log(f"  {data_type:38s} FAILED {e.code}: {e.read().decode('utf-8')[:300]}")
+            log(f"  {data_type:38s} FAILED {e.code} {_error_status(e)}")
             continue
         except OSError as e:  # network: timeouts, resets, no connection
             log(f"  {data_type:38s} FAILED: {e}")
@@ -459,6 +469,8 @@ if __name__ == '__main__':
     ap.add_argument('--auth', action='store_true', help='sign in to Google again')
     ap.add_argument('--days', type=int, default=30, help='days of history to pull (default 30)')
     args = ap.parse_args()
+    import private_files
+    private_files.lock_down()
     try:
         if args.auth:
             authorize()

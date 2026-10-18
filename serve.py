@@ -2,6 +2,9 @@
 
 Serves only the dashboard's own files, and only to this computer (127.0.0.1),
 so sign-in tokens, credentials and raw data in this folder are never exposed.
+Requests must name this server itself (Host 127.0.0.1:<port> or
+localhost:<port>), so a website can't reach it by pointing its own domain
+name at 127.0.0.1 (DNS rebinding).
 """
 import argparse
 import os
@@ -17,7 +20,14 @@ PUBLIC = {'/index.html', '/styles.css', '/app.js', '/icons.js', '/dashboard_data
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
+    def host_ok(self):
+        port = self.server.server_address[1]
+        return (self.headers.get('Host') or '').lower() in {f'127.0.0.1:{port}', f'localhost:{port}'}
+
     def do_GET(self):
+        if not self.host_ok():
+            self.send_error(403)
+            return
         path = urlparse(self.path).path
         if path == '/':
             path = '/index.html'
@@ -54,6 +64,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         # Always serve the latest build after the daily sync.
         self.send_header('Cache-Control', 'no-cache')
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
         super().end_headers()
 
     def log_message(self, *args):
