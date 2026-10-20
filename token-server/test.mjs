@@ -34,9 +34,9 @@ check('refresh returns an access token', r.status === 200 && b.access_token === 
 check('other sites are refused', (await call('/token', {}, 'https://evil.example')).status === 403);
 check('foreign redirect refused', (await call('/token', { code: 'c', code_verifier: 'v', redirect_uri: 'https://evil.example/' })).status === 400);
 check('other page on the same site refused', (await call('/token', { code: 'c', code_verifier: 'v', redirect_uri: 'https://app.example/other/' })).status === 400);
-env = { ...base, ALLOWED_REDIRECTS: 'https://app.example/fitbit-advance/' };
-check('listed redirect allowed', (await call('/token', { code: 'c', code_verifier: 'v', redirect_uri: 'https://app.example/fitbit-advance/' })).status === 200);
-check('unlisted redirect refused', (await call('/token', { code: 'c', code_verifier: 'v', redirect_uri: 'https://app.example/fitbit-advance/x' })).status === 400);
+env = { ...base, ALLOWED_REDIRECTS: 'https://app.example/DataStrap/' };
+check('listed redirect allowed', (await call('/token', { code: 'c', code_verifier: 'v', redirect_uri: 'https://app.example/DataStrap/' })).status === 200);
+check('unlisted redirect refused', (await call('/token', { code: 'c', code_verifier: 'v', redirect_uri: 'https://app.example/DataStrap/x' })).status === 400);
 check('preflight allowed', (await call('/token', null, 'https://app.example', 'OPTIONS')).status === 204);
 check('unknown path 404', (await call('/nope', {})).status === 404);
 

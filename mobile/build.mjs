@@ -56,7 +56,7 @@ if (WEB) {
   writeFileSync(join(out, 'manifest.webmanifest'), JSON.stringify({
     name: 'DataStrap',
     short_name: 'DataStrap',
-    description: 'Your Fitbit data: recovery, strain, sleep and more, worked out on your phone.',
+    description: 'Your health data: recovery, strain, sleep and more, worked out on your phone.',
     start_url: './',
     scope: './',
     display: 'standalone',

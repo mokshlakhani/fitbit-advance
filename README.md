@@ -9,8 +9,8 @@ Your data never leaves your computer. There's no account to create and no server
 You need **Python 3.9+** and a Fitbit that syncs to the Fitbit app.
 
 ```bash
-git clone https://github.com/mokshlakhani/fitbit-advance.git
-cd fitbit-advance
+git clone https://github.com/mokshlakhani/DataStrap.git
+cd DataStrap
 python3 setup.py
 ```
 

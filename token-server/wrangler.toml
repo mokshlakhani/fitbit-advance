@@ -9,7 +9,7 @@ GOOGLE_CLIENT_ID = "724732375940-8u76pdrhajo7b9q7fbkj4ak0vkb5u866.apps.googleuse
 # https://localhost is the Android app (for the portrait; it doesn't use sign-in here).
 ALLOWED_ORIGINS = "https://mokshlakhani.github.io,http://localhost:8092,https://localhost"
 # The exact sign-in pages Google sends people back to (as registered in Google Cloud).
-ALLOWED_REDIRECTS = "https://mokshlakhani.github.io/fitbit-advance/,http://localhost:8092/"
+ALLOWED_REDIRECTS = "https://mokshlakhani.github.io/DataStrap/,http://localhost:8092/"
 # From this date (UTC; or "true"/"false"), plain refresh tokens from app
 # versions before bound sign-in (2026-10-18) are refused and those people sign
 # in again. Until then they're moved onto the bound form on their next refresh.
